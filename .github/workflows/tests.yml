@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Linux packages (virtual screen, QR decoder)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libzbar0 fonts-dejavu-core
+      - name: Python packages
+        run: pip install -r requirements-dev.txt
+      - name: Code check
+        run: python -m pyflakes src tests tools
+      - name: Tests (Windows)
+        if: runner.os == 'Windows'
+        run: python -m unittest discover -s tests -t . -v
+      - name: Tests (Linux, virtual screen)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" python -m unittest discover -s tests -t . -v

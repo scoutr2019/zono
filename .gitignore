@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# The VLC engine is copied here locally (see README), never committed
+src/video/
+
+# Builds and release files
+dist/
+build/
+*.exe
+*.zip
+
+# Local app data and logs from test runs
+appdata/
+*.log
+running.flag
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

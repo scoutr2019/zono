@@ -1,0 +1,4 @@
+-r requirements.txt
+pyflakes>=3
+pyzbar>=0.1.9
+pefile>=2023.2.7
