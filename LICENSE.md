@@ -1,4 +1,4 @@
-Required Notice: Copyright (c) 2026 [NAAM EIGENAAR] (https://github.com/[GITHUB-NAAM]/zono)
+Required Notice: Copyright (c) 2026 scoutr2019 (https://github.com/scoutr2019/zono)
 
 # PolyForm Strict License 1.0.0
 

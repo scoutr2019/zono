@@ -19,6 +19,7 @@ from urllib.parse import urlsplit, urlunsplit
 from PIL import Image, ImageOps, ImageTk
 import catalogue as data
 import shutil
+import socket
 import subprocess
 import sys
 import player as engine_module
@@ -35,9 +36,10 @@ import threading
 from ui import (BG, SIDE, PANEL, RAISED, LINE, TEXT, SOFT, MUTED, DIM, ACCENT, ACCENT_SOFT, LIVE_RED, FONT,
                 Pill, Slider, Switch, S, label, elide)
 import i18n
+import netfix
 from i18n import T
 
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
         "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False
@@ -124,12 +126,22 @@ def _image_attempts(url):
     return sorted(attempts, key=lambda a: a[0] != first)
 
 
+_dead_hosts = {}  # host -> until when it is skipped: a picture server that does not exist at all
+
+
+def _unknown_host(error):
+    reason = getattr(error, "reason", error)
+    return isinstance(reason, socket.gaierror)
+
+
 def download_image(url, limit=5 * 1024 * 1024):
     """Posters and backdrops. Some providers' picture servers refuse unknown programs, only answer over the other
     scheme, or are blocked by a system proxy: try those ways too and remember what worked per server."""
     data.check_url(url)
     host = urlsplit(url).hostname
-    raw, last_error = None, None
+    if _dead_hosts.get(host, 0) > monotonic():
+        raise OSError(f"{host} bestaat niet")
+    raw, last_error, unknown = None, None, False
     for route, open_url, link in _image_attempts(url):
         try:
             with open_url(Request(link, headers=IMAGE_HEADERS), timeout=8) as response:
@@ -142,7 +154,12 @@ def download_image(url, limit=5 * 1024 * 1024):
                 break  # the picture does not exist: other ways will not help
         except (OSError, ValueError) as error:
             last_error = error
+            unknown = unknown or _unknown_host(error)
     if raw is None:
+        if isinstance(last_error, HTTPError) and last_error.code in (404, 410):
+            raise last_error  # one missing picture is normal: not worth a note in the log
+        if unknown:
+            _dead_hosts[host] = monotonic() + 600  # do not wait for this server for every poster
         count = _image_failures[host] = _image_failures.get(host, 0) + 1
         if count == 3:  # one note per server, after a few misses, so a dead link does not flood the log
             trace(f"afbeeldingen van {host} laden niet: {type(last_error).__name__}: {last_error}")
@@ -273,6 +290,8 @@ class Zono:
         self.results = SimpleQueue()
         self.workers = ThreadPoolExecutor(max_workers=2)
         self.art_workers = ThreadPoolExecutor(max_workers=5)
+        self.art_lock = threading.BoundedSemaphore(3)
+        self.art_fix, self.art_fix_saved, self.art_fix_dirty = {}, monotonic(), False
         self.guide_workers = ThreadPoolExecutor(max_workers=4)
         self.download_workers = ThreadPoolExecutor(max_workers=1)
         self.art_jobs = []
@@ -417,6 +436,9 @@ class Zono:
         if not isinstance(self.genre_cache, dict):
             self.genre_cache = {}
         self.tmdb_cache, self.enriching = {}, {}
+        art_fix = data.read_json(data.STATE.with_name("art.json"), {})
+        self.art_fix = art_fix if isinstance(art_fix, dict) else {}
+        self.art_fix_saved = monotonic()
         self.purge_downloads()
         self.set_library(state.get("library", []))
         trace("bibliotheek klaargezet")
@@ -2080,7 +2102,7 @@ class Zono:
         self.hero_art[item["id"]] = None
         source = self.source
         wants_info = bool(item.get("sid") and source and item["kind"] in ("movie", "series") and "plot" not in item)
-        if not wants_info and not art_url(item, "backdrop", "image"):
+        if not wants_info and not art_url(item, "backdrop", "image") and item.get("kind") not in ("movie", "series"):
             return
 
         def fetch():
@@ -2089,8 +2111,8 @@ class Zono:
                 result = safe(data.details, source, item)
                 info = result[0] if result else {}
             wide = art_url(item, "backdrop") or first_url(info.get("backdrop_path")) or first_url(info.get("backdrop"))
-            url = wide or art_url(item, "image")
-            return info, wide, (safe(backdrop, url) if url else None), wants_info
+            image = self.picture(item, backdrop, wide=True, first=wide)
+            return info, wide, image, wants_info
 
         def done(result):
             info, wide, image, asked = result
@@ -2519,6 +2541,97 @@ class Zono:
         if not self.genre_save_job:
             self.genre_save_job = self.root.after(3000, self.save_genres)
 
+    # ------------------------------------------------------------ pictures when the provider's own links fail
+
+    def spare_pictures(self, item, wide=False):
+        """Other picture links for a title whose own poster does not load: what worked before, the provider's
+        detail info (often TMDB pictures) and, with a TMDB key, TMDB itself. Runs in a worker thread; the answer is
+        kept in art.json so the provider is asked only once per title."""
+        if item.get("kind") not in ("movie", "series"):
+            return []
+        key = str(item.get("id"))
+        def stale(entry):  # links are checked again after a month, "nothing found" after three days
+            return not isinstance(entry, dict) or \
+                time() - entry.get("checked", 0) > (30 if entry.get("links") else 3) * 86400
+        entry = self.art_fix.get(key)
+        if stale(entry):
+            with self.art_lock:  # at most a few questions to the provider at the same time
+                entry = self.art_fix.get(key)
+                if stale(entry):
+                    entry = {"checked": int(time()), "links": self.find_pictures(item)}
+                    self.art_fix[key] = entry
+                    self.save_art_fix()
+        links = [link for link in entry.get("links", []) if isinstance(link, list) and len(link) == 2]
+        wanted = [url for kind, url in links if kind == ("wide" if wide else "tall")]
+        others = [url for kind, url in links if kind != ("wide" if wide else "tall")]
+        return [url for url in wanted + others if url != item.get("image")]
+
+    def find_pictures(self, item):
+        links = []
+
+        def add(kind, value):
+            for url in (value if isinstance(value, (list, tuple)) else [value]):
+                if is_url(url) and [kind, url] not in links:
+                    links.append([kind, url])
+        source = self.source
+        if source and item.get("sid"):
+            result = safe(data.details, source, item)
+            info = result[0] if result else {}
+            for name in ("movie_image", "cover_big", "cover"):
+                add("tall", info.get(name))
+            add("wide", info.get("backdrop_path"))
+            add("wide", info.get("backdrop"))
+            tmdb_id = info.get("tmdb_id") or info.get("tmdb")
+        else:
+            tmdb_id = None
+        key = str(self.preferences.get("tmdb_key") or "").strip()
+        if key:
+            original = str(item.get("raw_title") or item.get("title") or "")
+            found = safe(tmdb.art, key, original, item["kind"], tmdb.year_of(original), tmdb_id)
+            if found:
+                add("tall", found[0])
+                add("wide", found[1])
+        return links
+
+    def remember_picture(self, item, url):
+        """Put the link that worked first, so next time it is tried straight away."""
+        entry = self.art_fix.get(str(item.get("id")))
+        if isinstance(entry, dict):
+            links = entry.get("links", [])
+            for index, link in enumerate(links):
+                if isinstance(link, list) and link[1:] == [url] and index:
+                    links.insert(0, links.pop(index))
+                    self.save_art_fix()
+                    break
+
+    def save_art_fix(self, force=False):
+        if not force and monotonic() - self.art_fix_saved < 15:
+            self.art_fix_dirty = True
+            return
+        self.art_fix_saved, self.art_fix_dirty = monotonic(), False
+        try:
+            data.write_json(data.STATE.with_name("art.json"), dict(self.art_fix))
+        except OSError:
+            pass
+
+    def picture(self, item, loader, wide=False, first=None):
+        """`loader(url)` for the title's own picture, then for its spare pictures, until one loads."""
+        tried = []
+        for url in [first, art_url(item, "image")] if first else [art_url(item, "image")]:
+            if url and url not in tried:
+                tried.append(url)
+                image = safe(loader, url)
+                if image is not None:
+                    return image
+        for url in self.spare_pictures(item, wide):
+            if url not in tried:
+                tried.append(url)
+                image = safe(loader, url)
+                if image is not None:
+                    self.remember_picture(item, url)
+                    return image
+        return None
+
     def save_genres(self):
         self.genre_save_job = None
         try:
@@ -2806,7 +2919,7 @@ class Zono:
                 logo = safe(cover, url, (S(240), S(240)), True) if url else None
                 base = ui.channel_tile(title, w, h, logo)
             else:
-                base = (safe(cover, url, size) if url else None) or ui.poster_art(title, kind, w, h)
+                base = self.picture(item, lambda link: cover(link, size)) or ui.poster_art(title, kind, w, h)
             images = ui.card_images(base, ratio)
             return ui.rank_images(images, rank, h) if rank else images
         generation = self.generation
@@ -3020,6 +3133,8 @@ class Zono:
             self.root.after(10000, self.recording_tick)
 
     def _recording_tick(self):
+        if self.art_fix_dirty and monotonic() - self.art_fix_saved > 15:
+            self.save_art_fix(True)
         now = time()
         changed = False
         for entry in list(self.recordings):
@@ -6545,6 +6660,8 @@ class Zono:
             (data.ROOT / "running.flag").unlink(missing_ok=True)
         except OSError:
             pass
+        if self.art_fix_dirty:
+            self.save_art_fix(True)
         self.close_trailer()
         self.close_multiview()
         if self.recorders and not messagebox.askyesno(
@@ -6750,6 +6867,7 @@ def main():
         flag.write_text(datetime.now().isoformat(), encoding="utf-8")
     except OSError:
         pass
+    netfix.enable()  # servers that the computer's DNS cannot find (blocked picture servers)
     enable_dpi_awareness()
     root = tk.Tk()
     root.configure(bg=BG)

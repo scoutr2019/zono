@@ -69,6 +69,29 @@ def extras(key, title, kind, year="", tmdb_id=None):
             "overview": detail.get("overview") or ""}
 
 
+def art(key, title, kind, year="", tmdb_id=None):
+    """(poster link, wide backdrop link) from TMDB, or ("", "")."""
+    media = "tv" if kind == "series" else "movie"
+    if tmdb_id and str(tmdb_id).isdigit() and int(tmdb_id) > 0:
+        found = _get(key, f"/{media}/{int(tmdb_id)}")
+    else:
+        query = clean_title(title)
+        if not query:
+            return "", ""
+        params = {"query": query}
+        if year:
+            params["year" if media == "movie" else "first_air_date_year"] = year
+        results = _get(key, f"/search/{media}", **params).get("results") or []
+        if not results and year:
+            results = _get(key, f"/search/{media}", query=query).get("results") or []
+        if not results:
+            return "", ""
+        found = results[0]
+    poster = IMAGES + "w500" + found["poster_path"] if found.get("poster_path") else ""
+    wide = IMAGES + "w1280" + found["backdrop_path"] if found.get("backdrop_path") else ""
+    return poster, wide
+
+
 def check_key(key):
     _get(key, "/configuration")
     return True

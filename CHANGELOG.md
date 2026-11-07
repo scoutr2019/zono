@@ -1,5 +1,11 @@
 # Wijzigingen
 
+## 2.2.1
+- Posters als de beeldserver van de provider niet bestaat of geblokkeerd is: Zono gebruikt de foto's uit de filminfo van de provider (vaak TMDB) of, met een TMDB-sleutel, TMDB zelf, en onthoudt per titel wat werkte (art.json).
+- Servernamen die de DNS van je internetprovider blokkeert, worden opgezocht via beveiligde DNS (Cloudflare/Google).
+- Een server die niet bestaat wordt 10 minuten overgeslagen in plaats van bij elke poster opnieuw te wachten.
+- Eén ontbrekende poster (404) komt niet meer als melding in het logboek.
+
 ## 2.2.0
 - Zono in vier talen: Nederlands, Français, English, Deutsch (Instellingen › Algemeen › Taal; volgt standaard Windows).
 - Posters en achtergronden laden betrouwbaarder: andere route bij een systeemproxy, http/https-terugval, browser-herkenning; een melding in het logboek als een beeldserver niet antwoordt.
