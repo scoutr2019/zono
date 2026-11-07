@@ -10,15 +10,16 @@ from pathlib import Path
 from queue import SimpleQueue
 from time import monotonic, perf_counter, time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener, urlopen
 from uuid import uuid4
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from PIL import Image, ImageOps, ImageTk
 import catalogue as data
 import shutil
+import subprocess
 import sys
 import player as engine_module
 from player import Player
@@ -33,10 +34,12 @@ import webbrowser
 import threading
 from ui import (BG, SIDE, PANEL, RAISED, LINE, TEXT, SOFT, MUTED, DIM, ACCENT, ACCENT_SOFT, LIVE_RED, FONT,
                 Pill, Slider, Switch, S, label, elide)
+import i18n
+from i18n import T
 
-VERSION = "2.1.2"
-TABS = {"home": "Ontdekken", "live": "Live TV", "guide": "TV-gids", "movie": "Films", "series": "Series",
-        "favorites": "Favorieten", "downloads": "Downloads", "settings": "Instellingen"}
+VERSION = "2.2.0"
+TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
+        "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False
 _TRACE_START = monotonic()
 
@@ -52,21 +55,22 @@ def trace(step):
         pass
 
 HOME_SECTIONS = (
-    ("welcome", "Begroeting en ‘Kijk verder naar’", "Goedemorgen + wat je net keek, met één klik verder"),
-    ("resume", "Verder kijken", "Films en afleveringen die je nog niet uitkeek"),
-    ("channels", "Mijn zenders", "Je favoriete zenders, met wat er nu speelt"),
-    ("mylist", "Mijn lijst", "Films en series met een hartje"),
-    ("groups", "Mijn categorieën", "Een rij per categorie die je volgt"),
-    ("because", "Omdat je … keek", "Meer uit het genre van wat je laatst keek"),
-    ("country", "Uit jouw landen", "Zenders en titels uit de landen die je koos"),
-    ("top", "Top 10 films", "De best beoordeelde films"),
-    ("movies", "Beste films", "Meer goed beoordeelde films"),
-    ("series", "Series", "De best beoordeelde series"),
-    ("live", "Live TV", "Zenders, met je laatste zender vooraan"),
-    ("newest", "Nieuw toegevoegd", "Wat je provider onlangs toevoegde"),
-    ("genres", "Populaire genres", "Rijen voor de grootste filmcategorieën"),
+    ("welcome", T("Begroeting en ‘Kijk verder naar’"), T("Goedemorgen + wat je net keek, met één klik verder")),
+    ("resume", T("Verder kijken"), T("Films en afleveringen die je nog niet uitkeek")),
+    ("channels", T("Mijn zenders"), T("Je favoriete zenders, met wat er nu speelt")),
+    ("mylist", T("Mijn lijst"), T("Films en series met een hartje")),
+    ("groups", T("Mijn categorieën"), T("Een rij per categorie die je volgt")),
+    ("because", T("Omdat je … keek"), T("Meer uit het genre van wat je laatst keek")),
+    ("country", T("Uit jouw landen"), T("Zenders en titels uit de landen die je koos")),
+    ("top", T("Top 10 films"), T("De best beoordeelde films")),
+    ("movies", T("Beste films"), T("Meer goed beoordeelde films")),
+    ("series", T("Series"), T("De best beoordeelde series")),
+    ("live", T("Live TV"), T("Zenders, met je laatste zender vooraan")),
+    ("newest", T("Nieuw toegevoegd"), T("Wat je provider onlangs toevoegde")),
+    ("genres", T("Populaire genres"), T("Rijen voor de grootste filmcategorieën")),
 )
-KIND_LABEL = {"movie": "Film", "series": "Serie", "live": "Live TV", "catchup": "Terugkijken"}
+WEEKDAYS = ("Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag")  # T() when shown
+KIND_LABEL = {"movie": T("Film"), "series": T("Serie"), "live": T("Live TV"), "catchup": T("Terugkijken")}
 HERO_H = 480
 SIDEBAR_W = 236
 CARD = (156, 234)
@@ -78,12 +82,12 @@ KIDS_WORDS = ("adult", "xxx", "18+", "+18", "porn", "erotic", "erotik", "sex", "
 
 def error_text(error):
     if isinstance(error, HTTPError):
-        return f"De IPTV-server geeft HTTP {error.code}. Controleer je bron en inloggegevens."
+        return T('De IPTV-server geeft HTTP {}. Controleer je bron en inloggegevens.').format(error.code)
     if isinstance(error, (URLError, TimeoutError)):
-        return "De IPTV-server is niet bereikbaar. Controleer je verbinding en serveradres."
+        return T("De IPTV-server is niet bereikbaar. Controleer je verbinding en serveradres.")
     if type(error) is ValueError:
         return str(error)
-    return f"Deze actie is mislukt ({type(error).__name__})."
+    return T('Deze actie is mislukt ({}).').format(type(error).__name__)
 
 
 def number(value):
@@ -98,17 +102,52 @@ def clock(seconds):
 
 
 def minutes_left(seconds):
-    return f"nog {max(1, round(max(0, seconds) / 60))} min"
+    return T('nog {} min').format(max(1, round(max(0, seconds) / 60)))
 
 
 def hhmm(stamp):
     return datetime.fromtimestamp(stamp).strftime("%H:%M") if 0 < stamp < 4102444800 else ""
 
 
+IMAGE_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                                "Chrome/130.0 Safari/537.36", "Accept": "image/avif,image/webp,image/*,*/*;q=0.8"}
+_DIRECT = build_opener(ProxyHandler({}))
+_image_route = {}  # host -> the way that worked last time (0 = normal, 1 = without proxy, 2 = other scheme)
+_image_failures = {}  # host -> how often it failed, reported once in the log
+
+
+def _image_attempts(url):
+    parts = urlsplit(url)
+    other = urlunsplit(parts._replace(scheme="http" if parts.scheme == "https" else "https"))
+    attempts = [(0, urlopen, url), (1, _DIRECT.open, url), (2, urlopen, other)]
+    first = _image_route.get(parts.hostname, 0)
+    return sorted(attempts, key=lambda a: a[0] != first)
+
+
 def download_image(url, limit=5 * 1024 * 1024):
+    """Posters and backdrops. Some providers' picture servers refuse unknown programs, only answer over the other
+    scheme, or are blocked by a system proxy: try those ways too and remember what worked per server."""
     data.check_url(url)
-    with urlopen(Request(url, headers={"User-Agent": "Zono/1.1"}), timeout=6) as response:
-        raw = response.read(limit + 1)
+    host = urlsplit(url).hostname
+    raw, last_error = None, None
+    for route, open_url, link in _image_attempts(url):
+        try:
+            with open_url(Request(link, headers=IMAGE_HEADERS), timeout=8) as response:
+                raw = response.read(limit + 1)
+            _image_route[host] = route
+            break
+        except HTTPError as error:
+            last_error = error
+            if error.code in (404, 410):
+                break  # the picture does not exist: other ways will not help
+        except (OSError, ValueError) as error:
+            last_error = error
+    if raw is None:
+        count = _image_failures[host] = _image_failures.get(host, 0) + 1
+        if count == 3:  # one note per server, after a few misses, so a dead link does not flood the log
+            trace(f"afbeeldingen van {host} laden niet: {type(last_error).__name__}: {last_error}")
+            data.log_note(f"Afbeeldingen van {host} laden niet ({type(last_error).__name__}: {last_error})")
+        raise last_error or OSError("geen afbeelding")
     if len(raw) > limit:
         return None
     image = Image.open(BytesIO(raw))
@@ -343,7 +382,7 @@ class Zono:
             # show at once that the click landed; loading a big library can take a moment
             busy = tk.Frame(self.picker, bg=BG)
             busy.place(relx=.5, rely=.86, anchor="center")
-            label(busy, f"{profile.get('name', '')} wordt geladen…", 12, SOFT, BG, True).pack()
+            label(busy, T('{} wordt geladen…').format(profile.get('name', '')), 12, SOFT, BG, True).pack()
             self.root.config(cursor="watch")
             self.root.update_idletasks()
             self.root.update()
@@ -403,7 +442,7 @@ class Zono:
             self.safe_told = True
             data.log_error(f"{datetime.now():%Y-%m-%d %H:%M:%S}  Zono {VERSION} werd vorige keer niet normaal afgesloten · "
                            "veilige start (geen automatisch afspelen, live pauzeren tijdelijk uit)")
-            self.root.after(900, lambda: self.toast("Zono werd vorige keer niet goed afgesloten · veilige start: live pauzeren staat even uit",
+            self.root.after(900, lambda: self.toast(T("Zono werd vorige keer niet goed afgesloten · veilige start: live pauzeren staat even uit"),
                                                     "info"))
         if data.needs_protection(state):
             self.run(lambda: data.save_state(state), lambda _: None, lambda _: None)
@@ -433,7 +472,7 @@ class Zono:
             return
         self.chip_avatar.configure(image=ui.avatar_photo(profile.get("color", 0), S(34), profile.get("kids", False)))
         self.chip_name.configure(text=elide(profile.get("name", ""), 11, S(110), True))
-        self.chip_sub.configure(text="Kinderprofiel" if profile.get("kids") else "Profiel wisselen")
+        self.chip_sub.configure(text=T("Kinderprofiel") if profile.get("kids") else T("Profiel wisselen"))
         kids = bool(profile.get("kids"))
         source = self.nav.get("source")
         if source is not None:
@@ -466,7 +505,7 @@ class Zono:
         center.place(relx=.5, rely=.46, anchor="center")
         logo = tk.Label(picker, image=self.logo_photo, bg=BG)
         logo.place(x=S(40), y=S(32))
-        label(center, "Profielen beheren" if manage else "Wie kijkt er?", 30, TEXT, BG, True).pack(pady=(0, S(36)))
+        label(center, T("Profielen beheren") if manage else T("Wie kijkt er?"), 30, TEXT, BG, True).pack(pady=(0, S(36)))
         tiles = tk.Frame(center, bg=BG)
         tiles.pack()
         size = S(132)
@@ -476,7 +515,7 @@ class Zono:
             box.pack(side="left", anchor="n")
             if profile is None:
                 normal, hover = ui.add_tile_photo(size), ui.add_tile_photo(size, True)
-                name, sub = "Toevoegen", ""
+                name, sub = T("Toevoegen"), ""
                 action = lambda: self.edit_profile(None)
             else:
                 color, kids = profile.get("color", 0), profile.get("kids", False)
@@ -484,7 +523,7 @@ class Zono:
                 normal = ui.avatar_photo(color, size, kids, False, manage, icon)
                 hover = ui.avatar_photo(color, size, kids, True, manage, icon)
                 name = profile.get("name", "")
-                sub = "Kinderprofiel" if kids else ""
+                sub = T("Kinderprofiel") if kids else ""
                 if manage:
                     action = (lambda p=profile: self.ask_pin(p, lambda: self.edit_profile(p))
                               if p.get("pin") else self.edit_profile(p))
@@ -521,12 +560,12 @@ class Zono:
         actions = tk.Frame(center, bg=BG)
         actions.pack(pady=(S(44), 0))
         if manage:
-            Pill(actions, "Klaar", lambda: self.show_profiles(False), kind="primary", h=44, padx=30).pack(side="left")
+            Pill(actions, T("Klaar"), lambda: self.show_profiles(False), kind="primary", h=44, padx=30).pack(side="left")
         else:
-            Pill(actions, "Profielen beheren", lambda: self.show_profiles(True), kind="ghost", icon="pencil",
+            Pill(actions, T("Profielen beheren"), lambda: self.show_profiles(True), kind="ghost", icon="pencil",
                  h=44, padx=22).pack(side="left")
             if self.profile is not None:
-                Pill(actions, "Terug", self.close_profiles, kind="quiet", h=44, padx=20).pack(side="left", padx=S(10))
+                Pill(actions, T("Terug"), self.close_profiles, kind="quiet", h=44, padx=20).pack(side="left", padx=S(10))
 
         def keys(event):
             if event.keysym == "Escape":
@@ -549,7 +588,7 @@ class Zono:
         tk.Label(center, image=ui.avatar_photo(profile.get("color", 0), S(88), profile.get("kids", False)),
                  bg=BG).pack()
         label(center, profile.get("name", ""), 14, TEXT, BG, True).pack(pady=(S(12), S(2)))
-        hint = label(center, "Voer je pincode in", 11, MUTED, BG)
+        hint = label(center, T("Voer je pincode in"), 11, MUTED, BG)
         hint.pack(pady=(0, S(22)))
         dots = tk.Label(center, bg=BG, bd=0)
         dots.pack(pady=(0, S(26)))
@@ -584,7 +623,7 @@ class Zono:
                 if data.check_pin(profile.get("pin"), "".join(entered)):
                     layer.after(120, lambda: (close(), success()))
                 else:
-                    hint.configure(text="Onjuiste pincode, probeer opnieuw", fg="#fda4af")
+                    hint.configure(text=T("Onjuiste pincode, probeer opnieuw"), fg="#fda4af")
                     draw(error=True)
                     layer.after(260, shake)
 
@@ -604,7 +643,7 @@ class Zono:
                 else:
                     button = Pill(pad, key, lambda k=key: press(k), kind="ghost", h=60, px=17, weight="bold")
                 button.grid(row=r, column=c, padx=S(8), pady=S(6))
-        Pill(center, "Annuleren", close, kind="quiet", h=40, padx=18).pack(pady=(S(18), 0))
+        Pill(center, T("Annuleren"), close, kind="quiet", h=40, padx=18).pack(pady=(S(18), 0))
         draw()
 
         def keys(event):
@@ -625,7 +664,7 @@ class Zono:
         card = tk.Frame(layer, bg=SIDE, padx=S(34), pady=S(28), highlightthickness=1, highlightbackground=LINE)
         card.place(relx=.5, rely=.5, anchor="center")
         tk.Frame(card, bg=SIDE, width=S(500), height=0).pack()
-        label(card, "Profiel toevoegen" if creating else "Profiel bewerken", 20, TEXT, SIDE, True).pack(anchor="w")
+        label(card, T("Profiel toevoegen") if creating else T("Profiel bewerken"), 20, TEXT, SIDE, True).pack(anchor="w")
         previous_keys = self.overlay_keys
         values = dict(profile or {"name": "", "color": len(self.profiles["profiles"]) % len(ui.AVATARS), "kids": False})
         top = tk.Frame(card, bg=SIDE)
@@ -635,8 +674,8 @@ class Zono:
         fields = tk.Frame(top, bg=SIDE)
         fields.pack(side="left", fill="x", expand=True, padx=(S(22), 0))
         name = tk.StringVar(value=values.get("name", ""))
-        entry = self.field(fields, "Naam", name)
-        label(fields, "Kleur", 10, SOFT, SIDE).pack(anchor="w", pady=(S(12), S(6)))
+        entry = self.field(fields, T("Naam"), name)
+        label(fields, T("Kleur"), 10, SOFT, SIDE).pack(anchor="w", pady=(S(12), S(6)))
         swatches = tk.Frame(fields, bg=SIDE)
         swatches.pack(anchor="w")
 
@@ -658,27 +697,27 @@ class Zono:
                lambda v: (values.update(kids=v), refresh_preview())).pack(side="left", anchor="n")
         texts = tk.Frame(kids_row, bg=SIDE)
         texts.pack(side="left", padx=S(14))
-        label(texts, "Kinderprofiel", 11, TEXT, SIDE, True).pack(anchor="w")
-        label(texts, "Verbergt zenders en titels voor volwassenen. Provider en instellingen zijn afgeschermd.",
+        label(texts, T("Kinderprofiel"), 11, TEXT, SIDE, True).pack(anchor="w")
+        label(texts, T("Verbergt zenders en titels voor volwassenen. Provider en instellingen zijn afgeschermd."),
               9, MUTED, SIDE, wraplength=S(400), justify="left").pack(anchor="w")
 
         pin = tk.StringVar()
         has_pin = bool(profile and profile.get("pin"))
         pin_box = tk.Frame(card, bg=SIDE)
         pin_box.pack(fill="x", pady=(S(8), 0))
-        self.field(pin_box, "Nieuwe pincode (4 cijfers)" if has_pin else "Pincode (4 cijfers, optioneel)", pin, True)
+        self.field(pin_box, T("Nieuwe pincode (4 cijfers)") if has_pin else T("Pincode (4 cijfers, optioneel)"), pin, True)
         remove_pin = {"value": False}
         if has_pin:
             row = tk.Frame(pin_box, bg=SIDE)
             row.pack(anchor="w", pady=(S(10), 0))
             Switch(row, False, lambda v: remove_pin.update(value=v)).pack(side="left")
-            label(row, "Pincode verwijderen", 10, SOFT, SIDE).pack(side="left", padx=S(12))
+            label(row, T("Pincode verwijderen"), 10, SOFT, SIDE).pack(side="left", padx=S(12))
         copy = {"value": bool(creating and self.profile and self.source)}
         if creating and self.profile and self.source:
             row = tk.Frame(card, bg=SIDE)
             row.pack(anchor="w", pady=(S(14), 0))
             Switch(row, True, lambda v: copy.update(value=v)).pack(side="left")
-            label(row, f"Zelfde provider als {self.profile.get('name', '')}", 10, SOFT, SIDE).pack(side="left", padx=S(12))
+            label(row, T('Zelfde provider als {}').format(self.profile.get('name', '')), 10, SOFT, SIDE).pack(side="left", padx=S(12))
         status = label(card, "", 10, "#fda4af", SIDE)
         status.pack(anchor="w", pady=(S(12), 0))
         buttons = tk.Frame(card, bg=SIDE)
@@ -692,10 +731,10 @@ class Zono:
             text = name.get().strip()
             code = pin.get().strip()
             if not text:
-                status.configure(text="Geef het profiel een naam.")
+                status.configure(text=T("Geef het profiel een naam."))
                 return
             if code and (len(code) != 4 or not code.isdigit()):
-                status.configure(text="Een pincode bestaat uit precies 4 cijfers.")
+                status.configure(text=T("Een pincode bestaat uit precies 4 cijfers."))
                 return
             target = profile if profile is not None else {"id": uuid4().hex[:8]}
             if creating:
@@ -717,11 +756,11 @@ class Zono:
                 self.update_profile_chip()
                 self.set_library(self.state.get("library", []))
             self.show_profiles(True)
-            self.toast("Profiel aangemaakt" if creating else "Profiel opgeslagen")
+            self.toast(T("Profiel aangemaakt") if creating else T("Profiel opgeslagen"))
 
         def delete():
-            if delete_button.opts["text"] != "Zeker? Klik nogmaals":
-                delete_button.update_pill(text="Zeker? Klik nogmaals")
+            if delete_button.opts["text"] != T("Zeker? Klik nogmaals"):
+                delete_button.update_pill(text=T("Zeker? Klik nogmaals"))
                 return
             self.profiles["profiles"] = [p for p in self.profiles["profiles"] if p is not profile]
             data.delete_profile(profile)
@@ -733,11 +772,11 @@ class Zono:
                 self.stop_playback()
                 self.profile = None
             self.show_profiles(True)
-            self.toast("Profiel verwijderd", "trash")
-        Pill(buttons, "Opslaan", save, kind="primary", h=42, padx=24).pack(side="left")
-        Pill(buttons, "Annuleren", close, kind="ghost", h=42, padx=18).pack(side="left", padx=S(10))
+            self.toast(T("Profiel verwijderd"), "trash")
+        Pill(buttons, T("Opslaan"), save, kind="primary", h=42, padx=24).pack(side="left")
+        Pill(buttons, T("Annuleren"), close, kind="ghost", h=42, padx=18).pack(side="left", padx=S(10))
         if not creating and len(self.profiles["profiles"]) > 1:
-            delete_button = Pill(buttons, "Verwijderen", delete, kind="danger", icon="trash", h=42, padx=18)
+            delete_button = Pill(buttons, T("Verwijderen"), delete, kind="danger", icon="trash", h=42, padx=18)
             delete_button.pack(side="right")
 
         def keys(event):
@@ -755,7 +794,7 @@ class Zono:
         text = "".join(traceback.format_exception(kind, value, trace))
         data.log_error(f"{datetime.now():%Y-%m-%d %H:%M:%S}  Zono {VERSION}\n{text}")
         try:
-            self.toast("Er ging iets mis · opgeslagen in het logboek", "close")
+            self.toast(T("Er ging iets mis · opgeslagen in het logboek"), "close")
         except tk.TclError:
             pass
 
@@ -846,7 +885,7 @@ class Zono:
         self.refreshing = True
         source = self.source
         if not silent:
-            self.toast("Bibliotheek vernieuwen…", "wifi")
+            self.toast(T("Bibliotheek vernieuwen…"), "wifi")
 
         def failed(error):
             self.refreshing = False
@@ -873,7 +912,7 @@ class Zono:
                 if not silent and self.tab == "home" and not self.detail_item and not self.query.get() and not self.player_view:
                     self.render()  # a background refresh does not rebuild the page you are looking at
                 if not silent or quiet_toast:
-                    self.toast(f"Bibliotheek bijgewerkt  ·  {number(len(entries))} titels", "refresh")
+                    self.toast(T('Bibliotheek bijgewerkt  ·  {} titels').format(number(len(entries))), "refresh")
             self.run(lambda: data.save_state(new_state), saved, failed)
         self.run(lambda: data.catalog(source), loaded, failed)
 
@@ -911,12 +950,12 @@ class Zono:
         separator(side)
         item(side, "favorites", "heart")
         item(side, "downloads", "download")
-        item(side, "phone", "phone", "Op je telefoon", lambda: self.open_share())
+        item(side, "phone", "phone", T("Op je telefoon"), lambda: self.open_share())
 
         bottom = tk.Frame(side, bg=SIDE)
         bottom.pack(side="bottom", fill="x", pady=(0, S(14)))
         separator(bottom)
-        item(bottom, "source", "wifi", "Provider koppelen", self.configure_source)
+        item(bottom, "source", "wifi", T("Provider koppelen"), self.configure_source)
         item(bottom, "settings", "gear")
         separator(bottom)
         chip = tk.Frame(bottom, bg=SIDE, padx=S(12), pady=S(6), cursor="hand2")
@@ -927,7 +966,7 @@ class Zono:
         names.pack(side="left", padx=S(12))
         self.chip_name = label(names, "", 11, TEXT, SIDE, True, anchor="w")
         self.chip_name.pack(anchor="w")
-        self.chip_sub = label(names, "Profiel wisselen", 8, DIM, SIDE, anchor="w")
+        self.chip_sub = label(names, T("Profiel wisselen"), 8, DIM, SIDE, anchor="w")
         self.chip_sub.pack(anchor="w")
         tk.Label(chip, image=ui.pill_photo(icon="swap", kind="quiet", h=28, hover=False, disabled=False),
                  bg=SIDE).pack(side="right")
@@ -1060,7 +1099,7 @@ class Zono:
         try:
             text = data.LOG.read_text(encoding="utf-8", errors="replace") if data.LOG.exists() else ""
         except OSError as error:
-            text = f"Het logboek kon niet worden gelezen: {error_text(error)}"
+            text = T('Het logboek kon niet worden gelezen: {}').format(error_text(error))
         text = text.strip()
         try:
             started = (data.ROOT / "start.log").read_text(encoding="utf-8", errors="replace").strip()
@@ -1074,16 +1113,16 @@ class Zono:
         card = self.sheet(760, 0)
         body = tk.Frame(card, bg=SIDE, padx=S(30), pady=S(26))
         body.pack(fill="both", expand=True)
-        label(body, "Logboek", 18, TEXT, SIDE, True).pack(anchor="w")
+        label(body, T("Logboek"), 18, TEXT, SIDE, True).pack(anchor="w")
         if not text:
             box = tk.Frame(body, bg=SIDE)
             box.pack(fill="x", pady=(S(30), S(20)))
             Pill(box, "", None, kind="ghost", icon="check", h=64).pack()
-            label(box, "Alles werkt naar behoren", 15, TEXT, SIDE, True).pack(pady=(S(14), S(4)))
-            label(box, "Er staan geen fouten in het logboek. Gaat er ooit iets mis, dan zie je het hier.", 10, MUTED,
+            label(box, T("Alles werkt naar behoren"), 15, TEXT, SIDE, True).pack(pady=(S(14), S(4)))
+            label(box, T("Er staan geen fouten in het logboek. Gaat er ooit iets mis, dan zie je het hier."), 10, MUTED,
                   SIDE).pack()
             return
-        label(body, "Wat Zono onlangs niet lukte. Stuur dit mee als je hulp vraagt.", 10, MUTED, SIDE).pack(
+        label(body, T("Wat Zono onlangs niet lukte. Stuur dit mee als je hulp vraagt."), 10, MUTED, SIDE).pack(
             anchor="w", pady=(S(4), S(14)))
         holder = tk.Frame(body, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
         holder.pack(fill="both", expand=True)
@@ -1103,7 +1142,7 @@ class Zono:
         def copy():
             self.root.clipboard_clear()
             self.root.clipboard_append(text)
-            self.toast("Logboek gekopieerd")
+            self.toast(T("Logboek gekopieerd"))
 
         def clear():
             try:
@@ -1113,9 +1152,9 @@ class Zono:
                 return
             if self.sheet_close:
                 self.sheet_close()
-            self.toast("Logboek gewist", "trash")
-        Pill(tools, "Kopiëren", copy, kind="primary", icon="check", h=40, padx=16).pack(side="left")
-        Pill(tools, "Wissen", clear, kind="ghost", icon="trash", h=40, padx=16).pack(side="left", padx=S(10))
+            self.toast(T("Logboek gewist"), "trash")
+        Pill(tools, T("Kopiëren"), copy, kind="primary", icon="check", h=40, padx=16).pack(side="left")
+        Pill(tools, T("Wissen"), clear, kind="ghost", icon="trash", h=40, padx=16).pack(side="left", padx=S(10))
 
     def content_resized(self, _=None):
         if _ is not None and getattr(_, "widget", None) is not self.content:
@@ -1285,11 +1324,11 @@ class Zono:
             pool = self.by_kind.get("live", [])
             entries = [i for i in pool if self.in_category(i) and (not query or query in str(i["title"]).casefold())]
             if self.tab == "live":
-                head = self.page_header("Live TV", f"{number(len(pool))} zenders" if pool else "Nog geen zenders")
+                head = self.page_header(T("Live TV"), T('{} zenders').format(number(len(pool))) if pool else T("Nog geen zenders"))
                 if len(pool) > 1:
-                    Pill(head, "Multiview", lambda: self.open_multiview(), kind="ghost", icon="grid", h=38,
+                    Pill(head, T("Multiview"), lambda: self.open_multiview(), kind="ghost", icon="grid", h=38,
                          padx=14).place(relx=1, x=-S(64), rely=0, anchor="ne")
-                    Pill(head, "Zenders beheren", self.manage_channels, kind="ghost", icon="pencil", h=38,
+                    Pill(head, T("Zenders beheren"), self.manage_channels, kind="ghost", icon="pencil", h=38,
                          padx=14).place(relx=1, x=-S(210), rely=0, anchor="ne")
                 self.live_view(pool, entries)
             else:
@@ -1297,7 +1336,7 @@ class Zono:
             return
         if query:
             results = [i for i in self.library if query in str(i["title"]).casefold()]
-            self.page_header("Zoekresultaten", f"{number(len(results))} titels voor “{self.query.get().strip()}”")
+            self.page_header(T("Zoekresultaten"), T('{} titels voor “{}”').format(number(len(results)), self.query.get().strip()))
             self.section(None, results, grid=True)
             return
         if self.tab == "home":
@@ -1305,13 +1344,13 @@ class Zono:
             return
         if self.tab == "favorites":
             entries = list(self.favorites.values())
-            self.page_header("Favorieten", f"{number(len(entries))} bewaarde titels en zenders")
+            self.page_header(T("Favorieten"), T('{} bewaarde titels en zenders').format(number(len(entries))))
             self.section(None, entries, grid=True,
-                         empty="Klik op het hartje bij een titel of zender om hem hier te bewaren.")
+                         empty=T("Klik op het hartje bij een titel of zender om hem hier te bewaren."))
             return
         pool = self.by_kind.get(self.tab, [])
-        noun = "films" if self.tab == "movie" else "series"
-        self.page_header(TABS[self.tab], f"{number(len(pool))} {noun} in je bibliotheek")
+        count_text = T('{} films in je bibliotheek') if self.tab == "movie" else T('{} series in je bibliotheek')
+        self.page_header(TABS[self.tab], count_text.format(number(len(pool))))
         self.category_chips(pool)
         self.section(None, [i for i in pool if self.in_category(i)], grid=True)
 
@@ -1380,7 +1419,7 @@ class Zono:
             groups = sorted(counts, key=lambda g: (-counts[g], g.casefold()))[:10]
             if self.category in counts and self.category not in groups:
                 groups.insert(0, self.category)
-            extra = ("Alle categorieën", len(counts), lambda: self.category_picker(counts, pick))
+            extra = (T("Alle categorieën"), len(counts), lambda: self.category_picker(counts, pick))
         chosen = self.preferred_countries()
         if chosen:
             rank = lambda g: (chosen.index(c) if (c := countries.detect_text(g)) in chosen else len(chosen))
@@ -1389,11 +1428,11 @@ class Zono:
         for g in followed:
             if g in counts and g not in groups:
                 groups.insert(0, g)
-        options = [(None, "Alle", len(pool))] + [(g, g, counts[g]) for g in groups]
+        options = [(None, T("Alle"), len(pool))] + [(g, g, counts[g]) for g in groups]
         heart = None
         if self.category is not None and self.category in counts:
             on = self.category in followed
-            heart = ("Bij Ontdekken" if on else "Volgen", "heart_fill" if on else "heart",
+            heart = (T("Bij Ontdekken") if on else T("Volgen"), "heart_fill" if on else "heart",
                      lambda: self.toggle_favorite_group(kind, self.category))
         self.chip_strip(self.content, options, self.category, pick, pady=pady, extra=extra, heart=heart,
                         loved=followed)
@@ -1402,10 +1441,10 @@ class Zono:
         window = self.sheet(480, 600)
         frame = tk.Frame(window, bg=SIDE, padx=S(28), pady=S(24))
         frame.pack(fill="both", expand=True)
-        label(frame, "Categorieën", 18, TEXT, SIDE, True).pack(anchor="w")
-        label(frame, f"{number(len(counts))} categorieën", 10, MUTED, SIDE).pack(anchor="w", pady=(2, S(10)))
+        label(frame, T("Categorieën"), 18, TEXT, SIDE, True).pack(anchor="w")
+        label(frame, T('{} categorieën').format(number(len(counts))), 10, MUTED, SIDE).pack(anchor="w", pady=(2, S(10)))
         query = tk.StringVar()
-        entry = self.field(frame, "Zoek een categorie", query)
+        entry = self.field(frame, T("Zoek een categorie"), query)
         holder, listing = self.styled_list(frame)
         listing.configure(height=14)
         holder.pack(fill="both", expand=True, pady=(S(14), 0))
@@ -1484,7 +1523,7 @@ class Zono:
         if hero_mode != "off" or not self.library:
             visible = self.canvas.winfo_height() if self.canvas.winfo_height() > 1 else S(800)
             canvas = self.hero(featured, height=max(S(460), min(S(700), int(visible * .74))))
-            for kind, noun in (("movie", "films"), ("series", "series")):
+            for kind, noun in (("movie", T("Nr. {} in films")), ("series", T("Nr. {} in series"))):
                 if self.rated.get(kind):
                     for rank, item in enumerate(self.best[kind][:10], 1):
                         canvas.ranks[item["id"]] = (rank, noun)
@@ -1506,16 +1545,16 @@ class Zono:
 
         def resume_row():
             if resume:
-                self.section("Verder kijken", [p["item"] for p in resume][:size])
+                self.section(T("Verder kijken"), [p["item"] for p in resume][:size])
 
         def channels_row():
             if my_channels:
-                self.section("Mijn zenders", my_channels[:size], more="favorites", on_card=now_playing)
+                self.section(T("Mijn zenders"), my_channels[:size], more="favorites", on_card=now_playing)
 
         def mylist_row():
             mine = [i for i in self.favorites.values() if i["kind"] != "live"]
             if mine:
-                self.section("Mijn lijst", mine[:size], more="favorites")
+                self.section(T("Mijn lijst"), mine[:size], more="favorites")
 
         def groups_rows():
             for kind, group in self.favorite_groups():
@@ -1533,7 +1572,7 @@ class Zono:
                            and i["id"] != because["id"] and i["id"] not in self.progress]
                 similar.sort(key=lambda i: -score(i))
                 if group and group != "Overige" and len(similar) >= 4:
-                    self.section(f"Omdat je {elide(str(because['title']), 16, S(420), True)} keek", similar[:size])
+                    self.section(T('Omdat je {} keek').format(elide(str(because['title']), 16, S(420), True)), similar[:size])
 
         def by_country(name, source):
             def build():
@@ -1550,29 +1589,29 @@ class Zono:
             for code in self.preferred_countries()[:3]:
                 lives = live_by_country.get(code, [])
                 if lives:
-                    self.section(f"Zenders · {countries.name(code)}", lives[:size], more="live", on_card=now_playing)
+                    self.section(T('Zenders · {}').format(countries.name(code)), lives[:size], more="live", on_card=now_playing)
                 titles = by_country("movie_countries", movies).get(code, []) + by_country("series_countries", series).get(code, [])
                 titles.sort(key=lambda i: -score(i))
                 if len(titles) >= 4:
-                    self.section(f"Films en series · {countries.name(code)}", titles[:size])
+                    self.section(T('Films en series · {}').format(countries.name(code)), titles[:size])
 
         def top_row():
             if self.rated.get("movie") and len(movies) >= 3:
-                self.section("Top 10 films vandaag", movies[:10], more="movie", ranked=True)
+                self.section(T("Top 10 films vandaag"), movies[:10], more="movie", ranked=True)
 
         def movies_row():
             if movies:
                 rest = movies[10:10 + size] if self.rated.get("movie") and len(movies) > 16 else movies[:size]
-                self.section("Beste films" if self.rated.get("movie") else "Films", rest, more="movie")
+                self.section(T("Beste films") if self.rated.get("movie") else T("Films"), rest, more="movie")
 
         def series_row():
             if series:
                 if self.rated.get("series") and len(series) >= 3:
-                    self.section("Beste series", series[:10], more="series", ranked=True)
+                    self.section(T("Beste series"), series[:10], more="series", ranked=True)
                     if len(series) > 14:
-                        self.section("Meer series", series[10:10 + size], more="series")
+                        self.section(T("Meer series"), series[10:10 + size], more="series")
                 else:
-                    self.section("Series", series[:size], more="series")
+                    self.section(T("Series"), series[:size], more="series")
 
         def live_row():
             lives = self.by_kind.get("live", [])
@@ -1587,13 +1626,13 @@ class Zono:
                         row.append(item)
                     if len(row) == size:
                         break
-                self.section("Meer zenders" if my_channels and "channels" in shown else "Live TV", row, more="live",
+                self.section(T("Meer zenders") if my_channels and "channels" in shown else T("Live TV"), row, more="live",
                              on_card=now_playing)
 
         def newest_row():
             newest = sorted(self.newest.get("movie", []) + self.newest.get("series", []), key=lambda i: -added_of(i))[:size]
             if len(newest) >= 4:
-                self.section("Nieuw toegevoegd", newest)
+                self.section(T("Nieuw toegevoegd"), newest)
 
         def genre_rows():
             def build():
@@ -1618,7 +1657,7 @@ class Zono:
             if on:
                 builders[key]()
         tools = tk.Frame(self.content, bg=BG)
-        Pill(tools, "Ontdekken aanpassen", self.edit_home, kind="ghost", icon="pencil", h=40, padx=16).pack(side="left")
+        Pill(tools, T("Ontdekken aanpassen"), self.edit_home, kind="ghost", icon="pencil", h=40, padx=16).pack(side="left")
         self.defer(lambda: tools.pack(anchor="w", padx=S(44), pady=(S(10), S(40))) if tools.winfo_exists() else None)
 
     def edit_home(self):
@@ -1626,17 +1665,17 @@ class Zono:
         card = self.sheet(620, 0)
         body = tk.Frame(card, bg=SIDE, padx=S(30), pady=S(24))
         body.pack(fill="both", expand=True)
-        label(body, "Ontdekken aanpassen", 18, TEXT, SIDE, True).pack(anchor="w")
-        label(body, "Zet rijen aan of uit en verschuif ze met de pijltjes. Wijzigingen worden meteen bewaard.", 10,
+        label(body, T("Ontdekken aanpassen"), 18, TEXT, SIDE, True).pack(anchor="w")
+        label(body, T("Zet rijen aan of uit en verschuif ze met de pijltjes. Wijzigingen worden meteen bewaard."), 10,
               MUTED, SIDE).pack(anchor="w", pady=(S(2), S(10)))
         options = tk.Frame(body, bg=SIDE)
         options.pack(fill="x")
-        self.choice_row(options, "Grote banner bovenaan", [("mix", "Films en series"), ("movie", "Films"),
-                        ("series", "Series"), ("mine", "Mijn lijst"), ("off", "Uit")],
+        self.choice_row(options, T("Grote banner bovenaan"), [("mix", T("Films en series")), ("movie", T("Films")),
+                        ("series", T("Series")), ("mine", T("Mijn lijst")), ("off", T("Uit"))],
                         self.preferences.get("home_hero", "mix"), "home_hero", bg=SIDE, note=None)
-        self.choice_row(options, "Titels per rij", [(10, "10"), (20, "20"), (40, "40")],
+        self.choice_row(options, T("Titels per rij"), [(10, "10"), (20, "20"), (40, "40")],
                         int(self.preferences.get("home_row_size", 20) or 20), "home_row_size", bg=SIDE, note=None)
-        label(body, "RIJEN", 8, DIM, SIDE, True).pack(anchor="w", pady=(S(18), S(6)))
+        label(body, T("RIJEN"), 8, DIM, SIDE, True).pack(anchor="w", pady=(S(18), S(6)))
         visible = max(S(220), min(S(470), self.root.winfo_height() - S(470)))
         scroller = tk.Canvas(body, bg=SIDE, highlightthickness=0, bd=0, height=visible, yscrollincrement=S(12))
         scroller.pack(fill="x")
@@ -1691,9 +1730,9 @@ class Zono:
             for key, value in (("home_layout", None), ("home_hero", "mix"), ("home_row_size", 20)):
                 self.remember_preference(key, value)
             draw()
-        Pill(bottom, "Klaar", finish, kind="primary", icon="check", h=40, padx=18).pack(side="left")
-        Pill(bottom, "Standaard herstellen", reset, kind="ghost", icon="refresh", h=40, padx=16).pack(side="left", padx=S(10))
-        Pill(bottom, "Landen kiezen", lambda: (self.sheet_close and self.sheet_close(), self.edit_countries()),
+        Pill(bottom, T("Klaar"), finish, kind="primary", icon="check", h=40, padx=18).pack(side="left")
+        Pill(bottom, T("Standaard herstellen"), reset, kind="ghost", icon="refresh", h=40, padx=16).pack(side="left", padx=S(10))
+        Pill(bottom, T("Landen kiezen"), lambda: (self.sheet_close and self.sheet_close(), self.edit_countries()),
              kind="ghost", icon="live", h=40, padx=16).pack(side="right")
 
     def manage_channels(self):
@@ -1701,9 +1740,9 @@ class Zono:
         card = self.sheet(700, 0)
         body = tk.Frame(card, bg=SIDE, padx=S(30), pady=S(24))
         body.pack(fill="both", expand=True)
-        label(body, "Zenders beheren", 18, TEXT, SIDE, True).pack(anchor="w")
-        label(body, "Verberg zenders die je nooit kijkt, of geef een zender je eigen naam. Verborgen zenders verdwijnen uit "
-                    "Live TV, de gids, zoeken en Ontdekken.", 10, MUTED, SIDE, wraplength=S(620), justify="left").pack(
+        label(body, T("Zenders beheren"), 18, TEXT, SIDE, True).pack(anchor="w")
+        label(body, T("Verberg zenders die je nooit kijkt, of geef een zender je eigen naam. Verborgen zenders verdwijnen uit "
+                    "Live TV, de gids, zoeken en Ontdekken."), 10, MUTED, SIDE, wraplength=S(620), justify="left").pack(
             anchor="w", pady=(S(2), S(10)))
         top = tk.Frame(body, bg=SIDE)
         top.pack(fill="x")
@@ -1719,7 +1758,7 @@ class Zono:
             for key, pill in chips.items():
                 pill.update_pill(kind="chip_on" if key == value else "chip")
             draw()
-        for value, text in (("all", "Alle"), ("hidden", "Verborgen"), ("renamed", "Eigen naam")):
+        for value, text in (("all", T("Alle")), ("hidden", T("Verborgen")), ("renamed", T("Eigen naam"))):
             chips[value] = Pill(top, text, lambda v=value: set_mode(v), kind="chip_on" if value == "all" else "chip",
                                 h=34, px=11.5, bg=SIDE)
             chips[value].pack(side="left", padx=(S(8), 0))
@@ -1763,9 +1802,9 @@ class Zono:
                 if mode["value"] == "renamed" and item["id"] not in names:
                     continue
                 rows.append((item, raw, shown))
-            status.configure(text=f"{number(len(rows))} zenders" + ("  ·  de eerste 150 worden getoond, zoek om te verfijnen"
+            status.configure(text=T('{} zenders').format(number(len(rows))) + (T("  ·  de eerste 150 worden getoond, zoek om te verfijnen")
                                                                     if len(rows) > 150 else "")
-                             + (f"  ·  {number(len(hidden))} verborgen" if hidden else ""))
+                             + (T('  ·  {} verborgen').format(number(len(hidden))) if hidden else ""))
             for item, raw, shown in rows[:150]:
                 off = item["id"] in hidden
                 row = tk.Frame(holder, bg=SIDE, padx=S(10), pady=S(6))
@@ -1775,7 +1814,7 @@ class Zono:
                 name = label(texts, elide(shown, 11, S(420), True), 11, DIM if off else TEXT, SIDE, True)
                 name.pack(anchor="w")
                 if clean and countries.is_separator(raw):
-                    label(texts, "Scheidingslijn van je provider  ·  wordt automatisch verborgen", 8, DIM, SIDE).pack(anchor="w")
+                    label(texts, T("Scheidingslijn van je provider  ·  wordt automatisch verborgen"), 8, DIM, SIDE).pack(anchor="w")
                 elif shown != raw:
                     label(texts, elide(raw, 8, S(420)), 8, DIM, SIDE).pack(anchor="w")
 
@@ -1824,7 +1863,7 @@ class Zono:
                         n.pop(i["id"], None)
                         save(h, n)
                         draw()
-                    Pill(row, "Oorspronkelijk", reset, kind="quiet", h=30, bg=SIDE, padx=10).pack(side="right", padx=(0, S(6)))
+                    Pill(row, T("Oorspronkelijk"), reset, kind="quiet", h=30, bg=SIDE, padx=10).pack(side="right", padx=(0, S(6)))
             scroller.yview_moveto(0)
         query.trace_add("write", lambda *_: draw())
         draw()
@@ -1837,7 +1876,7 @@ class Zono:
             if changed["any"]:
                 self.set_library(self.raw_library)
                 self.render()
-        Pill(bottom, "Klaar", finish, kind="primary", icon="check", h=40, padx=18).pack(side="left")
+        Pill(bottom, T("Klaar"), finish, kind="primary", icon="check", h=40, padx=18).pack(side="left")
         switch = tk.Frame(bottom, bg=SIDE)
         switch.pack(side="left", padx=S(18))
 
@@ -1846,7 +1885,7 @@ class Zono:
             changed["any"] = True
             draw()
         Switch(switch, self.preferences.get("clean_names", True), set_clean).pack(side="left")
-        label(switch, "Namen opschonen (“4K | VRT 1 HD” → “VRT 1”)", 10, SOFT, SIDE).pack(side="left", padx=S(10))
+        label(switch, T("Namen opschonen (“4K | VRT 1 HD” → “VRT 1”)"), 10, SOFT, SIDE).pack(side="left", padx=S(10))
         entry.focus_set()
 
     def memo(self, name, source, build):
@@ -1882,7 +1921,7 @@ class Zono:
             counts = self.detected_countries()
             chosen = self.preferred_countries()
             if not counts:
-                label(holder, "Zono herkent nog geen landen in je zenders. Koppel eerst je provider.", 10, MUTED, bg).pack(anchor="w")
+                label(holder, T("Zono herkent nog geen landen in je zenders. Koppel eerst je provider."), 10, MUTED, bg).pack(anchor="w")
                 return
             codes = chosen + sorted((c for c in counts if c not in chosen), key=lambda c: -counts[c])
             row = None
@@ -1913,13 +1952,13 @@ class Zono:
         card = self.sheet(640, 0)
         body = tk.Frame(card, bg=SIDE, padx=S(30), pady=S(24))
         body.pack(fill="both", expand=True)
-        label(body, "Landen en talen", 18, TEXT, SIDE, True).pack(anchor="w")
-        label(body, "Klik je landen aan in de volgorde die je wilt. Hun zenders komen vooraan in Live TV en de gids, "
-                    "hun categorieën eerst, en Ontdekken krijgt rijen ‘Uit jouw landen’.", 10, MUTED, SIDE,
+        label(body, T("Landen en talen"), 18, TEXT, SIDE, True).pack(anchor="w")
+        label(body, T("Klik je landen aan in de volgorde die je wilt. Hun zenders komen vooraan in Live TV en de gids, "
+                    "hun categorieën eerst, en Ontdekken krijgt rijen ‘Uit jouw landen’."), 10, MUTED, SIDE,
               wraplength=S(560), justify="left").pack(anchor="w", pady=(S(2), S(16)))
         self.country_picker(body, SIDE)
-        self.choice_row(body, "Zenders en titels van andere landen",
-                        [("last", "Achteraan tonen"), ("hide", "Verbergen")],
+        self.choice_row(body, T("Zenders en titels van andere landen"),
+                        [("last", T("Achteraan tonen")), ("hide", T("Verbergen"))],
                         self.preferences.get("other_countries", "last"), "other_countries", bg=SIDE, note=None,
                         after=lambda _: self.set_library(self.raw_library))
 
@@ -1927,7 +1966,7 @@ class Zono:
             if self.sheet_close:
                 self.sheet_close()
             self.render()
-        Pill(body, "Klaar", finish, kind="primary", icon="check", h=40, padx=18).pack(anchor="w", pady=(S(20), 0))
+        Pill(body, T("Klaar"), finish, kind="primary", icon="check", h=40, padx=18).pack(anchor="w", pady=(S(20), 0))
 
     def favorite_groups(self):
         """Categories the profile follows, as (kind, group) pairs."""
@@ -1938,10 +1977,10 @@ class Zono:
         groups = self.favorite_groups()
         if (kind, group) in groups:
             groups.remove((kind, group))
-            self.toast(f"{group} niet meer bij Ontdekken", "heart")
+            self.toast(T('{} niet meer bij Ontdekken').format(group), "heart")
         else:
             groups.append((kind, group))
-            self.toast(f"{group} staat nu bij Ontdekken", "heart_fill")
+            self.toast(T('{} staat nu bij Ontdekken').format(group), "heart_fill")
         self.remember_preference("fav_groups", [list(g) for g in groups])
         self.render()
 
@@ -1949,22 +1988,22 @@ class Zono:
         """A personal start: a greeting and whatever you were watching, one click away."""
         name = str((self.profile or {}).get("name") or "").strip()
         hour = datetime.now().hour
-        hello = "Goedemorgen" if 5 <= hour < 12 else "Goedemiddag" if hour < 18 else "Goedenavond" if hour < 23 else "Hallo nachtuil"
+        hello = T("Goedemorgen") if 5 <= hour < 12 else T("Goedemiddag") if hour < 18 else T("Goedenavond") if hour < 23 else T("Hallo nachtuil")
         block = tk.Frame(self.content, bg=BG)
         block.pack(fill="x", padx=S(44), pady=(S(26), S(4)))
         label(block, f"{hello}{', ' + name if name else ''}", 20, TEXT, BG, True).pack(anchor="w")
         count = len(self.favorites) + len(self.favorite_groups())
-        tip = f"Jouw Ontdekken · {count} favoriet{'en' if count != 1 else ''} staan hier bovenaan" if count else \
-            "Tik op het hartje bij een zender, film, serie of categorie: dan komt hij hier bovenaan."
+        tip = (T('Jouw Ontdekken · {} favorieten staan hier bovenaan') if count != 1 else T('Jouw Ontdekken · 1 favoriet staat hier bovenaan')).format(count) if count else \
+            T("Tik op het hartje bij een zender, film, serie of categorie: dan komt hij hier bovenaan.")
         label(block, tip, 10, MUTED, BG).pack(anchor="w", pady=(S(2), 0))
         if not self.preferred_countries() and len(self.detected_countries()) >= 2 \
                 and not self.preferences.get("countries_asked"):
             ask = tk.Frame(block, bg=PANEL, padx=S(16), pady=S(12))
             ask.pack(anchor="w", pady=(S(14), 0))
-            label(ask, "Welke landen wil je eerst zien?", 11, TEXT, PANEL, True).pack(side="left")
-            Pill(ask, "Landen kiezen", lambda: (self.remember_preference("countries_asked", True), self.edit_countries()),
+            label(ask, T("Welke landen wil je eerst zien?"), 11, TEXT, PANEL, True).pack(side="left")
+            Pill(ask, T("Landen kiezen"), lambda: (self.remember_preference("countries_asked", True), self.edit_countries()),
                  kind="primary", icon="live", h=36, padx=14).pack(side="left", padx=(S(16), S(8)))
-            Pill(ask, "Later", lambda: (self.remember_preference("countries_asked", True), self.render()),
+            Pill(ask, T("Later"), lambda: (self.remember_preference("countries_asked", True), self.render()),
                  kind="ghost", h=36, padx=14).pack(side="left")
         current = self.session["item"] if self.session else None
         playing = bool(current)
@@ -1984,27 +2023,27 @@ class Zono:
             self.load_thumb(thumb, current, (S(46), S(66)))
         texts = tk.Frame(card, bg=PANEL)
         texts.pack(side="left", padx=(S(16), S(28)))
-        label(texts, "NU AAN HET KIJKEN" if playing else "KIJK VERDER NAAR", 8, ACCENT_SOFT, PANEL, True).pack(anchor="w")
+        label(texts, T("NU AAN HET KIJKEN") if playing else T("KIJK VERDER NAAR"), 8, ACCENT_SOFT, PANEL, True).pack(anchor="w")
         label(texts, elide(str(current.get("title", "")), 15, S(420), True), 15, TEXT, PANEL, True).pack(anchor="w")
-        detail = label(texts, "Live TV" if live else KIND_LABEL.get(current.get("kind"), ""), 10, MUTED, PANEL)
+        detail = label(texts, T("Live TV") if live else KIND_LABEL.get(current.get("kind"), ""), 10, MUTED, PANEL)
         detail.pack(anchor="w")
         if live and current.get("sid") and self.source:
             def show_now(rows, widget=detail):
                 program = current_program(rows)
                 if program and widget.winfo_exists():
-                    widget.configure(text=f"Nu: {elide(program['title'], 10, S(380))}")
+                    widget.configure(text=T('Nu: {}').format(elide(program['title'], 10, S(380))))
             self.fetch_guide(current, show_now)
         elif current["id"] in self.progress:
             entry = self.progress[current["id"]]
             left = max(1, round((entry.get("duration", 0) - entry.get("time", 0)) / 60))
-            detail.configure(text=f"Nog {left} min")
+            detail.configure(text=T('Nog {} min').format(left))
 
         def go():
             if playing and self.session:
                 self.expand_player()
             else:
                 self.open_item(current)
-        Pill(card, "Verder kijken" if not playing else "Openen", go, kind="primary", icon="play", h=42, padx=18).pack(side="left")
+        Pill(card, T("Verder kijken") if not playing else T("Openen"), go, kind="primary", icon="play", h=42, padx=18).pack(side="left")
         ui.bind_hover(card, lambda: ui.set_bg(card, RAISED), lambda: ui.set_bg(card, PANEL))
         ui.bind_click(card, go)
 
@@ -2104,7 +2143,7 @@ class Zono:
         normal = ui.pill_photo(hover=False, disabled=False, **options)
         hover = ui.pill_photo(hover=True, disabled=False, **options)
         canvas.button_id += 1
-        tag = f"button{canvas.button_id}"
+        tag = 'button{}'.format(canvas.button_id)
         item = canvas.create_image(x, y, image=normal, anchor=anchor, tags=(group, tag))
         canvas.tag_bind(tag, "<Enter>", lambda _: (canvas.itemconfigure(item, image=hover), canvas.configure(cursor="hand2")))
         canvas.tag_bind(tag, "<Leave>", lambda _: (canvas.itemconfigure(item, image=normal), canvas.configure(cursor="")))
@@ -2161,10 +2200,10 @@ class Zono:
             if not canvas.detail and len(description) > 210:
                 description = description[:209].rsplit(" ", 1)[0] + "…"
         else:
-            eyebrow = "ZONO  ·  JOUW IPTV"
-            title = "Al je tv op één plek."
+            eyebrow = T("ZONO  ·  JOUW IPTV")
+            title = T("Al je tv op één plek.")
             caption = ""
-            description = "Koppel je IPTV-provider en ontdek live tv, films en series in één rustige, overzichtelijke app."
+            description = T("Koppel je IPTV-provider en ontdek live tv, films en series in één rustige, overzichtelijke app.")
         if len(title) > 90:
             title = title[:89] + "…"
         text_width = min(S(700), max(S(320), int(width * 0.55)))
@@ -2172,7 +2211,7 @@ class Zono:
         if rank:
             badge = self.canvas_button(canvas, x, y, lambda: None, text="TOP 10", kind="accent", h=24, px=10,
                                        radius=6, weight="bold", padx=9)
-            canvas.create_text(badge[2] + S(10), (badge[1] + badge[3]) / 2, text=f"Nr. {rank[0]} in {rank[1]}",
+            canvas.create_text(badge[2] + S(10), (badge[1] + badge[3]) / 2, text=rank[1].format(rank[0]),
                                fill=TEXT, anchor="w", font=(FONT, 12, "bold"), tags="content")
             y = badge[3] + S(12)
         else:
@@ -2192,26 +2231,26 @@ class Zono:
         y += S(20)
         if item:
             if canvas.detail and item["kind"] == "series":
-                primary = ("Afleveringen", "series", self.scroll_to_episodes)
+                primary = (T("Afleveringen"), "series", self.scroll_to_episodes)
             elif item["kind"] == "series":
-                primary = ("Bekijken", "play", lambda: self.show_detail(item))
+                primary = (T("Bekijken"), "play", lambda: self.show_detail(item))
             else:
-                primary = ("Hervatten" if item["id"] in self.progress else "Afspelen", "play", lambda: self.open_item(item))
+                primary = (T("Hervatten") if item["id"] in self.progress else T("Afspelen"), "play", lambda: self.open_item(item))
             box = self.canvas_button(canvas, x, y, primary[2], text=primary[0], icon=primary[1], kind="primary",
                                      h=48, px=13.5, padx=24)
             bx = box[2] + S(28)
             favorite = item["id"] in self.favorites
             actions = []
             if not canvas.detail:
-                actions.append(("info", "Meer info", lambda: self.show_detail(item)))
-            actions.append(("heart_fill" if favorite else "heart", "Favoriet", lambda: self.hero_favorite(canvas, item)))
+                actions.append(("info", T("Meer info"), lambda: self.show_detail(item)))
+            actions.append(("heart_fill" if favorite else "heart", T("Favoriet"), lambda: self.hero_favorite(canvas, item)))
             if canvas.detail and item.get("trailer"):
                 actions.append(("trailer", "Trailer", lambda: self.open_trailer(item)))
             if canvas.detail and item["kind"] == "movie":
                 if self.downloaded_file(item["id"]):
-                    actions.append(("check", "Gedownload", lambda: self.select("downloads")))
+                    actions.append(("check", T("Gedownload"), lambda: self.select("downloads")))
                 else:
-                    actions.append(("download", "Download", lambda: (self.download(item), self.draw_hero(canvas))))
+                    actions.append(("download", T("Download"), lambda: (self.download(item), self.draw_hero(canvas))))
             for icon, text, command in actions:
                 self.canvas_button(canvas, bx, y + S(1), command, icon=icon, h=46)
                 canvas.create_text(bx + S(23), y + S(56), text=text, fill=SOFT, anchor="n", font=(FONT, 9), tags="content")
@@ -2227,7 +2266,7 @@ class Zono:
                 canvas.create_text(x + bar + S(18), y, text=minutes_left(watched["duration"] - watched["time"]), fill=SOFT,
                                    anchor="w", font=(FONT, 10), tags="content")
         else:
-            self.canvas_button(canvas, x, y, self.configure_source, text="Provider koppelen", icon="wifi",
+            self.canvas_button(canvas, x, y, self.configure_source, text=T("Provider koppelen"), icon="wifi",
                                kind="primary", h=48, px=13.5, padx=24)
         box = canvas.bbox("content")
         if box:
@@ -2241,7 +2280,7 @@ class Zono:
             for index in reversed(range(len(canvas.items))):
                 active = index == canvas.index
                 w = S(34 if active else 6)
-                tag = f"dot{index}"
+                tag = 'dot{}'.format(index)
                 canvas.create_line(dx - w + half, y, dx - half, y, width=S(6), capstyle="round",
                                    fill="#4d4d58" if active else "#3a3a44", tags=tag)
                 if active:
@@ -2259,13 +2298,13 @@ class Zono:
     def welcome_rows(self):
         block = tk.Frame(self.content, bg=BG)
         block.pack(fill="x", padx=S(44), pady=(S(14), S(30)))
-        label(block, "Zo begin je", 16, TEXT, BG, True).pack(anchor="w", pady=(0, S(14)))
+        label(block, T("Zo begin je"), 16, TEXT, BG, True).pack(anchor="w", pady=(0, S(14)))
         tiles = tk.Frame(block, bg=BG)
         tiles.pack(fill="x")
         for column, (icon, title, caption, command) in enumerate((
-                ("wifi", "Provider koppelen", "Voeg je Xtream Codes-gegevens of een M3U-afspeellijst toe.", self.configure_source),
-                ("live", "Live TV", "Zap door je zenders, met programmagids erbij.", lambda: self.select("live")),
-                ("film", "Films en series", "Blader door je hele catalogus, per categorie.", lambda: self.select("movie")))):
+                ("wifi", T("Provider koppelen"), T("Voeg je Xtream Codes-gegevens of een M3U-afspeellijst toe."), self.configure_source),
+                ("live", T("Live TV"), T("Zap door je zenders, met programmagids erbij."), lambda: self.select("live")),
+                ("film", T("Films en series"), T("Blader door je hele catalogus, per categorie."), lambda: self.select("movie")))):
             tiles.columnconfigure(column, weight=1, uniform="tile")
             box = tk.Frame(tiles, bg=PANEL, padx=S(22), pady=S(20))
             box.grid(row=0, column=column, sticky="nsew", padx=(0, S(14)))
@@ -2318,12 +2357,12 @@ class Zono:
             for child in similar_holder.winfo_children():
                 child.destroy()
             entries = self.similar_items(item, state["genres"], state["extra"].get("similar", []))
-            title = "Meer zoals dit"
+            title = T("Meer zoals dit")
             if not entries:
                 group = item.get("group")
                 entries = [i for i in self.by_kind.get(item["kind"], [])
                            if i["id"] != item["id"] and i.get("group") == group][:20]
-                title = f"Meer uit {group}" if group and group != "Overige" else title
+                title = T('Meer uit {}').format(group) if group and group != "Overige" else title
             if entries:
                 self.section(title, entries, padx=56, parent=similar_holder)
 
@@ -2339,7 +2378,7 @@ class Zono:
                 return
             box = tk.Frame(cast_holder, bg=BG)
             box.pack(fill="x", padx=S(56), pady=(S(14), S(18)))
-            label(box, "Cast", 16, TEXT, BG, True).pack(anchor="w", pady=(0, S(12)))
+            label(box, T("Cast"), 16, TEXT, BG, True).pack(anchor="w", pady=(0, S(12)))
             rail = tk.Canvas(box, bg=BG, highlightthickness=0, height=S(150), xscrollincrement=S(40))
             rail.hscroll = True
             rail.pack(fill="x")
@@ -2374,13 +2413,13 @@ class Zono:
             for child in details_holder.winfo_children():
                 child.destroy()
             rating = info.get("rating")
-            rows = [("Regie", info.get("director")), ("Cast", info.get("cast")), ("Genres", ", ".join(genres)),
-                    ("Uitgebracht", info.get("releasedate") or info.get("releaseDate")), ("Duur", info.get("duration")),
-                    ("Land", info.get("country")),
-                    ("Beoordeling", f"★ {rating}" if rating not in (None, "", "0", 0, "0.0") else "")]
+            rows = [(T("Regie"), info.get("director")), (T("Cast"), info.get("cast")), (T("Genres"), ", ".join(genres)),
+                    (T("Uitgebracht"), info.get("releasedate") or info.get("releaseDate")), (T("Duur"), info.get("duration")),
+                    (T("Land"), info.get("country")),
+                    (T("Beoordeling"), f"★ {rating}" if rating not in (None, "", "0", 0, "0.0") else "")]
             rows = [(name, str(value).strip()) for name, value in rows if value and str(value).strip()]
             if rows:
-                label(details_holder, "Details", 16, TEXT, BG, True).pack(anchor="w", pady=(S(12), S(10)))
+                label(details_holder, T("Details"), 16, TEXT, BG, True).pack(anchor="w", pady=(S(12), S(10)))
                 table = tk.Frame(details_holder, bg=BG)
                 table.pack(anchor="w")
                 for index, (name, value) in enumerate(rows):
@@ -2410,7 +2449,7 @@ class Zono:
         draw_similar()
         if not item.get("sid") or not self.source:
             return
-        status.configure(text="Details laden…")
+        status.configure(text=T("Details laden…"))
         source = self.source
 
         def done(result):
@@ -2537,11 +2576,11 @@ class Zono:
                      lambda _, c=candidate: finished(c, None), executor=self.info_workers)
 
     def episodes_block(self, block, entries, series=None):
-        self.episode_anchor = label(block, "Afleveringen", 16, TEXT, BG, True)
+        self.episode_anchor = label(block, T("Afleveringen"), 16, TEXT, BG, True)
         self.episode_anchor.pack(anchor="w", pady=(S(18), S(12)))
         seasons = list(dict.fromkeys(entry["group"] for entry in entries))
         if not seasons:
-            label(block, "Geen afleveringen gevonden.", 10, MUTED).pack(anchor="w")
+            label(block, T("Geen afleveringen gevonden."), 10, MUTED).pack(anchor="w")
             return
         name = (series or {}).get("title", "")
         for entry in entries:
@@ -2569,11 +2608,11 @@ class Zono:
                 saved = self.downloaded_file(entry["id"])
                 job = self.download_jobs.get(entry["id"])
                 if seen and not job:
-                    subtitle = "✓ Gezien" + ("  ·  gedownload" if saved else "")
+                    subtitle = T("✓ Gezien") + (T("  ·  gedownload") if saved else "")
                 elif saved:
-                    subtitle = "✓ Gedownload, ook offline te bekijken"
+                    subtitle = T("✓ Gedownload, ook offline te bekijken")
                 elif job:
-                    subtitle = "Downloaden…"
+                    subtitle = T("Downloaden…")
                 elif watched.get("duration"):
                     subtitle = minutes_left(watched["duration"] - watched["time"])
                 else:
@@ -2592,13 +2631,13 @@ class Zono:
                       and not self.downloaded_file(e["id"]) and e["id"] not in self.download_jobs]
             for entry in chosen:
                 self.download(entry, quiet=True)
-            self.toast(f"{len(chosen)} afleveringen toegevoegd aan Downloads" if chosen else "Dit seizoen staat al op je pc",
+            self.toast(T('{} afleveringen toegevoegd aan Downloads').format(len(chosen)) if chosen else T("Dit seizoen staat al op je pc"),
                        "download")
             show(current["season"])
         pills = self.chip_strip(block, [(s, s, counts[s]) for s in seasons], start, show, padx=0, pady=(0, 10))
         tools.pack(fill="x", pady=(0, S(8)))
-        Pill(tools, "Seizoen downloaden", download_season, kind="ghost", icon="download", h=36, padx=16).pack(side="left")
-        label(tools, "Voor onderweg of op het vliegtuig", 9, DIM, BG).pack(side="left", padx=S(12))
+        Pill(tools, T("Seizoen downloaden"), download_season, kind="ghost", icon="download", h=36, padx=16).pack(side="left")
+        label(tools, T("Voor onderweg of op het vliegtuig"), 9, DIM, BG).pack(side="left", padx=S(12))
         rows.pack(fill="x")
         show(start)
 
@@ -2641,8 +2680,8 @@ class Zono:
             box.pack(fill="x", pady=S(40))
             icon = "search" if self.query.get() else "heart" if self.tab == "favorites" else "film"
             Pill(box, "", None, kind="ghost", icon=icon, h=64).pack()
-            label(box, "Niets gevonden", 15, TEXT, BG, True).pack(pady=(S(14), S(4)))
-            label(box, empty or "Probeer een andere zoekterm of categorie.", 10, MUTED).pack()
+            label(box, T("Niets gevonden"), 15, TEXT, BG, True).pack(pady=(S(14), S(4)))
+            label(box, empty or T("Probeer een andere zoekterm of categorie."), 10, MUTED).pack()
             return
         if grid:
             self.has_grid = True
@@ -2664,7 +2703,7 @@ class Zono:
                     self.defer(lambda: build(start + chunk))
             build(0)
             if len(entries) > self.limit:
-                Pill(block, f"Meer tonen  ·  nog {number(len(entries) - self.limit)}", self.more, kind="ghost").pack(
+                Pill(block, T('Meer tonen  ·  nog {}').format(number(len(entries) - self.limit)), self.more, kind="ghost").pack(
                     side="bottom", anchor="w")
             return
         rail = tk.Canvas(block, bg=BG, highlightthickness=0, height=S(40), xscrollincrement=S(44))
@@ -2716,13 +2755,13 @@ class Zono:
         title = label(tile, elide(item["title"], 10, w, True), 10, TEXT, BG, True, cursor="hand2")
         title.pack(anchor="w", pady=(S(9), 0), padx=(offset, 0))
         if item["id"] in self.watched and ratio is None:
-            subtitle = "✓ Gezien  ·  " + KIND_LABEL.get(item["kind"], "")
+            subtitle = T("✓ Gezien  ·  ") + KIND_LABEL.get(item["kind"], "")
         elif ratio is not None:
             subtitle = minutes_left(watched["duration"] - watched["time"])
         elif live:
             cached = self.guide_cache.get(item.get("sid"))
             now = current_program(cached[1]) if cached else None
-            subtitle = f"Nu: {now['title']}" if now and now["title"] else str(item.get("group") or "Live TV")
+            subtitle = T('Nu: {}').format(now['title']) if now and now["title"] else str(item.get("group") or T("Live TV"))
         else:
             group = str(item.get("group") or "")
             subtitle = KIND_LABEL.get(item["kind"], "") + (f"  ·  {group}" if group and group != "Overige" else "")
@@ -2734,7 +2773,7 @@ class Zono:
         def set_now(rows):
             current = current_program(rows)
             if current and current["title"] and sub.winfo_exists():
-                sub.configure(text=elide(f"Nu: {current['title']}", 9, w), fg=SOFT)
+                sub.configure(text=elide(T('Nu: {}').format(current['title']), 9, w), fg=SOFT)
         tile.set_now = set_now
 
         def hover(flag):
@@ -2837,11 +2876,11 @@ class Zono:
 
     def play_catchup(self, channel, program):
         if not self.source or not program.get("label"):
-            self.toast("Dit programma kan niet worden teruggekeken", "close")
+            self.toast(T("Dit programma kan niet worden teruggekeken"), "close")
             return
         minutes = max(1, round((program["end"] - program["start"]) / 60))
-        item = {"id": f"{channel['id']}|catchup|{program['label']}", "kind": "catchup",
-                "title": program.get("title") or "Programma", "group": channel.get("title", ""),
+        item = {"id": '{}|catchup|{}'.format(channel['id'], program['label']), "kind": "catchup",
+                "title": program.get("title") or T("Programma"), "group": channel.get("title", ""),
                 "image": channel.get("image", ""), "channel": channel.get("title", ""),
                 "url": data.timeshift_url(self.source, channel["sid"], program["label"], minutes),
                 "when": f"{hhmm(program['start'])} – {hhmm(program['end'])}"}
@@ -2862,15 +2901,15 @@ class Zono:
     def plan_recording(self, channel, program):
         if self.recording_for(channel, program):
             return
-        title = program.get("title") or "Programma"
+        title = program.get("title") or T("Programma")
         self.recordings.append({
             "id": uuid4().hex[:12], "channel_id": channel["id"], "channel": channel.get("title", ""),
             "image": channel.get("image", ""), "url": channel.get("url", ""), "title": title,
             "start": int(program["start"]), "end": int(program["end"]), "status": "planned",
             "store": str(data.STATE.with_name("downloads.json"))})
         self.save_recordings()
-        when = "nu" if program["start"] <= time() else f"om {hhmm(program['start'])}"
-        self.toast(f"Opname gepland: {elide(title, 10, S(260), True)} · start {when}", "record")
+        when = "nu" if program["start"] <= time() else T('om {}').format(hhmm(program['start']))
+        self.toast(T('Opname gepland: {} · start {}').format(elide(title, 10, S(260), True), when), "record")
         self.recording_tick(reschedule=False)
 
     def cancel_recording(self, entry):
@@ -2881,7 +2920,7 @@ class Zono:
         else:
             self.recordings = [r for r in self.recordings if r is not entry]
             self.save_recordings()
-            self.toast("Opname geannuleerd", "close")
+            self.toast(T("Opname geannuleerd"), "close")
         if self.tab == "downloads":
             self.render()
 
@@ -2899,11 +2938,11 @@ class Zono:
         self.save_recordings()
         if size < 256 * 1024:
             path.unlink(missing_ok=True)
-            self.toast(f"Opname mislukt: {elide(entry['title'], 10, S(260), True)}", "close")
+            self.toast(T('Opname mislukt: {}').format(elide(entry['title'], 10, S(260), True)), "close")
             return
         day = datetime.fromtimestamp(entry["start"]).strftime("%d/%m")
-        done = {"id": f"rec|{entry['id']}", "kind": "movie", "title": f"{entry['title']}  ·  {entry['channel']} {day}",
-                "group": "Opname", "image": entry.get("image", ""), "file": str(path), "saved": time(), "size": size,
+        done = {"id": 'rec|{}'.format(entry['id']), "kind": "movie", "title": f"{entry['title']}  ·  {entry['channel']} {day}",
+                "group": T("Opname"), "image": entry.get("image", ""), "file": str(path), "saved": time(), "size": size,
                 "url": ""}
         if entry.get("store") == str(data.STATE.with_name("downloads.json")):
             self.downloaded = [e for e in self.downloaded if e.get("id") != done["id"]] + [done]
@@ -2915,16 +2954,16 @@ class Zono:
                 data.write_json(store, (existing if isinstance(existing, list) else []) + [done])
             except OSError:
                 pass
-        self.toast(f"Opname {'gestopt' if stopped else 'klaar'}: {elide(entry['title'], 10, S(260), True)} · bij Downloads",
+        self.toast((T('Opname gestopt: {} · bij Downloads') if stopped else T('Opname klaar: {} · bij Downloads')).format(elide(entry['title'], 10, S(260), True)),
                    "check")
         if self.tab == "downloads":
             self.render()
 
     def recording_path(self, title, channel, start):
-        folder = Path(self.preferences.get("download_folder", data.STATE.parent / "Downloads")) / "Opnames"
-        name = re.sub(r'[^\w -]', "_", f"{title} - {channel}")[:80].strip() or "Opname"
+        folder = Path(self.preferences.get("download_folder", data.STATE.parent / T("Downloads"))) / T("Opnames")
+        name = re.sub(r'[^\w -]', "_", f"{title} - {channel}")[:80].strip() or T("Opname")
         stamp = datetime.fromtimestamp(start).strftime("%Y-%m-%d %H.%M")
-        return folder / f"{name} {stamp}.ts"
+        return folder / '{} {}.ts'.format(name, stamp)
 
     def active_recording(self, channel_id):
         return next((r for r in self.recordings if r.get("channel_id") == channel_id and r.get("status") == "recording"
@@ -2936,7 +2975,7 @@ class Zono:
         if self.active_recording(channel["id"]):
             return
         start = int(time())
-        title = title or channel.get("title", "Opname")
+        title = title or channel.get("title", T("Opname"))
         path = self.recording_path(title, channel.get("title", ""), start)
         session = self.session
         buffer = session.get("buffer") if session and session["live"] and session["item"].get("id") == channel["id"] else None
@@ -2944,7 +2983,7 @@ class Zono:
             recorder = engine_module.BufferTap(buffer, path) if buffer is not None else \
                 engine_module.Recorder(data.check_url(channel["url"]), path)
         except (OSError, ValueError, AttributeError) as error:
-            self.toast(f"Opnemen lukt niet: {elide(error_text(error), 10, S(320), True)}", "close")
+            self.toast(T('Opnemen lukt niet: {}').format(elide(error_text(error), 10, S(320), True)), "close")
             return
         entry = {"id": uuid4().hex[:12], "channel_id": channel["id"], "channel": channel.get("title", ""),
                  "image": channel.get("image", ""), "url": channel.get("url", ""), "title": title, "start": start,
@@ -2953,7 +2992,7 @@ class Zono:
         self.recordings.append(entry)
         self.recorders[entry["id"]] = recorder
         self.save_recordings()
-        self.toast(f"Opname gestart · tot {hhmm(end)}", "record")
+        self.toast(T('Opname gestart · tot {}').format(hhmm(end)), "record")
 
     def hand_over_recordings(self, buffer):
         """You switch channel while recording from the live buffer: continue with a direct recording."""
@@ -2989,10 +3028,10 @@ class Zono:
                 entry["status"] = "missed"
                 changed = True
             elif status == "planned" and now >= entry["start"] - 60:
-                folder = Path(self.preferences.get("download_folder", data.STATE.parent / "Downloads")) / "Opnames"
-                name = re.sub(r'[^\w -]', "_", f"{entry['title']} - {entry['channel']}")[:80].strip() or "Opname"
+                folder = Path(self.preferences.get("download_folder", data.STATE.parent / T("Downloads"))) / T("Opnames")
+                name = re.sub(r'[^\w -]', "_", f"{entry['title']} - {entry['channel']}")[:80].strip() or T("Opname")
                 stamp = datetime.fromtimestamp(entry["start"]).strftime("%Y-%m-%d %H.%M")
-                path = folder / f"{name} {stamp}.ts"
+                path = folder / '{} {}.ts'.format(name, stamp)
                 session = self.session
                 buffer = session.get("buffer") if session and session["live"] and \
                     session["item"].get("id") == entry["channel_id"] else None
@@ -3002,10 +3041,10 @@ class Zono:
                 except (OSError, ValueError, AttributeError) as error:
                     entry["status"] = "failed"
                     entry["error"] = error_text(error)
-                    self.toast(f"Opname kon niet starten: {elide(entry['title'], 10, S(240), True)}", "close")
+                    self.toast(T('Opname kon niet starten: {}').format(elide(entry['title'], 10, S(240), True)), "close")
                 else:
                     entry.update(status="recording", file=str(path))
-                    self.toast(f"Opname gestart: {elide(entry['title'], 10, S(260), True)}", "record")
+                    self.toast(T('Opname gestart: {}').format(elide(entry['title'], 10, S(260), True)), "record")
                 changed = True
             elif status == "recording":
                 recorder = self.recorders.get(entry["id"])
@@ -3029,11 +3068,11 @@ class Zono:
         moment = time()
         current = program["start"] <= moment < program["end"]
         past = program["end"] <= moment
-        label(body, ("NU OP " if current else "") + str(channel.get("title", "")).upper(), 8, ACCENT_SOFT, SIDE, True).pack(anchor="w")
-        label(body, program.get("title") or "Programma", 18, TEXT, SIDE, True, wraplength=S(440), justify="left").pack(
+        label(body, (T("NU OP ") if current else "") + str(channel.get("title", "")).upper(), 8, ACCENT_SOFT, SIDE, True).pack(anchor="w")
+        label(body, program.get("title") or T("Programma"), 18, TEXT, SIDE, True, wraplength=S(440), justify="left").pack(
             anchor="w", pady=(S(4), S(2)))
         day = datetime.fromtimestamp(program["start"])
-        when = ("Vandaag" if day.date() == datetime.now().date() else day.strftime("%A %d/%m").capitalize())
+        when = (T("Vandaag") if day.date() == datetime.now().date() else T(WEEKDAYS[day.weekday()]) + day.strftime(" %d/%m"))
         label(body, f"{when}  ·  {hhmm(program['start'])} – {hhmm(program['end'])}", 10, MUTED, SIDE).pack(anchor="w")
         if program.get("description"):
             label(body, str(program["description"])[:420], 10, SOFT, SIDE, wraplength=S(440), justify="left").pack(
@@ -3046,25 +3085,25 @@ class Zono:
                 self.sheet_close()
             action()
         if current:
-            Pill(buttons, "Kijken", lambda: done(lambda: self.open_player(channel, playlist or [channel])),
+            Pill(buttons, T("Kijken"), lambda: done(lambda: self.open_player(channel, playlist or [channel])),
                  kind="primary", icon="play", h=42, padx=18).pack(side="left", padx=(0, S(8)))
         if past and self.archivable(channel, program):
-            Pill(buttons, "Terugkijken", lambda: done(lambda: self.play_catchup(channel, program)),
+            Pill(buttons, T("Terugkijken"), lambda: done(lambda: self.play_catchup(channel, program)),
                  kind="primary", icon="refresh", h=42, padx=18).pack(side="left", padx=(0, S(8)))
         if not past and channel.get("url"):
             planned = self.recording_for(channel, program)
             if planned:
-                Pill(buttons, "Opname annuleren", lambda: done(lambda: (self.cancel_recording(planned), self.render())),
+                Pill(buttons, T("Opname annuleren"), lambda: done(lambda: (self.cancel_recording(planned), self.render())),
                      kind="ghost", icon="close", h=42, padx=18).pack(side="left")
             else:
-                Pill(buttons, "Opnemen", lambda: done(lambda: (self.plan_recording(channel, program), self.render())),
+                Pill(buttons, T("Opnemen"), lambda: done(lambda: (self.plan_recording(channel, program), self.render())),
                      kind="ghost", icon="record", h=42, padx=18).pack(side="left")
         if not past:
-            label(body, "Opnames lopen zolang Zono open staat (geminimaliseerd mag). Ze verschijnen daarna bij Downloads. "
-                        "Kijk je tegelijk naar iets anders, dan gebruikt dat een tweede verbinding met je provider.",
+            label(body, T("Opnames lopen zolang Zono open staat (geminimaliseerd mag). Ze verschijnen daarna bij Downloads. "
+                        "Kijk je tegelijk naar iets anders, dan gebruikt dat een tweede verbinding met je provider."),
                   9, MUTED, SIDE, wraplength=S(440), justify="left").pack(anchor="w", pady=(S(16), 0))
         elif not self.archivable(channel, program):
-            label(body, "Deze zender biedt dit programma niet aan om terug te kijken.", 9, MUTED, SIDE).pack(
+            label(body, T("Deze zender biedt dit programma niet aan om terug te kijken."), 9, MUTED, SIDE).pack(
                 anchor="w", pady=(S(16), 0))
 
     def zap_input(self, digit, items, jump):
@@ -3087,7 +3126,7 @@ class Zono:
         overlay.lift()
         index = int(self.zap_digits) - 1
         overlay.number.configure(text=self.zap_digits)
-        overlay.name.configure(text=elide(items[index]["title"], 11, S(260)) if 0 <= index < len(items) else "Geen zender")
+        overlay.name.configure(text=elide(items[index]["title"], 11, S(260)) if 0 <= index < len(items) else T("Geen zender"))
 
         def commit():
             self.zap_job = None
@@ -3116,19 +3155,19 @@ class Zono:
         idle = tk.Frame(surface, bg="#000000")
         idle.place(relx=.5, rely=.5, anchor="center")
         Pill(idle, "", None, kind="ghost", icon="tv", h=56, bg="#000000").pack()
-        idle_text = label(idle, "Kies een zender om te kijken" if entries else "Geen zenders gevonden", 12, MUTED, "#000000")
+        idle_text = label(idle, T("Kies een zender om te kijken") if entries else T("Geen zenders gevonden"), 12, MUTED, "#000000")
         idle_text.pack(pady=(S(12), 0))
 
         info = tk.Frame(top, bg=BG)
         info.pack(side="left", fill="both", expand=True, padx=(S(34), 0))
-        label(info, "NU LIVE", 9, MUTED, BG, True).pack(anchor="w")
+        label(info, T("NU LIVE"), 9, MUTED, BG, True).pack(anchor="w")
         badge_row = tk.Frame(info, bg=BG)
         badge_row.pack(anchor="w", pady=(S(10), 0))
         badge = Pill(badge_row, "LIVE", None, kind="live", h=22, px=9.5, radius=5, weight="bold")
         channel = label(badge_row, "", 11, SOFT)
-        now = label(info, "Kies een zender", 24, TEXT, BG, True, justify="left")
+        now = label(info, T("Kies een zender"), 24, TEXT, BG, True, justify="left")
         now.pack(anchor="w", pady=(S(8), 0))
-        when = label(info, "Klik op een zender hieronder, of zap met ↑ en ↓.", 10, MUTED, BG, justify="left")
+        when = label(info, T("Klik op een zender hieronder, of zap met ↑ en ↓."), 10, MUTED, BG, justify="left")
         when.pack(anchor="w", pady=(S(4), 0))
         meter = tk.Canvas(info, bg=BG, height=S(14), width=S(340), highlightthickness=0)
         meter.pack(anchor="w", pady=(S(14), 0))
@@ -3162,9 +3201,9 @@ class Zono:
             if selected["item"]:
                 on = self.toggle(selected["item"])
                 fav.update_pill(icon="heart_fill" if on else "heart")
-        fav = Pill(actions, "Favoriet", favorite, kind="ghost", icon="heart", h=42, padx=18)
+        fav = Pill(actions, T("Favoriet"), favorite, kind="ghost", icon="heart", h=42, padx=18)
         fav.pack(side="left", padx=(0, S(10)))
-        Pill(actions, "TV-gids", lambda: self.select("guide"), kind="ghost", icon="guide", h=42, padx=18).pack(side="left")
+        Pill(actions, T("TV-gids"), lambda: self.select("guide"), kind="ghost", icon="guide", h=42, padx=18).pack(side="left")
         big.set_enabled(False)
         fav.set_enabled(False)
 
@@ -3188,10 +3227,10 @@ class Zono:
         listing.pack(side="left", fill="both", expand=True, anchor="n")
         guide = tk.Frame(lower, bg=PANEL, padx=S(20), pady=S(18))
         guide.pack(side="left", anchor="n", padx=(S(24), 0))
-        label(guide, "Nu en straks", 13, TEXT, PANEL, True).pack(anchor="w")
+        label(guide, T("Nu en straks"), 13, TEXT, PANEL, True).pack(anchor="w")
         programs = tk.Frame(guide, bg=PANEL)
         programs.pack(fill="x", pady=(S(10), 0))
-        label(programs, "Kies een zender om de\nprogrammagids te zien.", 10, MUTED, PANEL, justify="left").pack(anchor="w")
+        label(programs, T("Kies een zender om de\nprogrammagids te zien."), 10, MUTED, PANEL, justify="left").pack(anchor="w")
         tk.Frame(guide, bg=PANEL, width=S(300), height=1).pack()
 
         rows = []
@@ -3210,9 +3249,9 @@ class Zono:
                 self.defer(lambda: build_rows(len(rows) + 8))
         build_rows(14)
         if len(entries) > len(shown):
-            Pill(listing, f"Meer zenders  ·  nog {number(len(entries) - len(shown))}", self.more, kind="ghost").pack(anchor="w", pady=S(12))
+            Pill(listing, T('Meer zenders  ·  nog {}').format(number(len(entries) - len(shown))), self.more, kind="ghost").pack(anchor="w", pady=S(12))
         if not entries:
-            label(listing, "Geen zenders in deze selectie.", 11, MUTED).pack(anchor="w", pady=S(20))
+            label(listing, T("Geen zenders in deze selectie."), 11, MUTED).pack(anchor="w", pady=S(20))
         for index, item in enumerate(shown[:14]):
             if item.get("sid") and self.source:
                 self.fetch_guide(item, lambda r, i=index: rows[i].set_now(r) if rows[i].winfo_exists() else None)
@@ -3233,21 +3272,21 @@ class Zono:
             current = current_program(rows_data, moment)
             later = [r for r in rows_data if r["start"] >= (current["end"] if current else moment)]
             if current:
-                now.configure(text=current["title"] or "Programma")
+                now.configure(text=current["title"] or T("Programma"))
                 when.configure(text=f'{hhmm(current["start"])} – {hhmm(current["end"])}')
                 draw_meter(current, moment)
             if later:
-                upcoming.configure(text=f'Straks  {hhmm(later[0]["start"])}  {later[0]["title"] or "Programma"}')
+                upcoming.configure(text=T('Straks  {}  {}').format(hhmm(later[0]["start"]), later[0]["title"] or T("Programma")))
             for row in [r for r in rows_data if r["end"] > moment][:10]:
                 active = row is current
                 line = tk.Frame(programs, bg=PANEL)
                 line.pack(fill="x", pady=S(4))
                 label(line, hhmm(row["start"]) or "--:--", 10, ACCENT_SOFT if active else MUTED, PANEL, active,
                       width=6, anchor="w").pack(side="left", anchor="n")
-                label(line, elide(row["title"] or "Programma", 10, S(230), active), 10, TEXT if active else SOFT,
+                label(line, elide(row["title"] or T("Programma"), 10, S(230), active), 10, TEXT if active else SOFT,
                       PANEL, active).pack(side="left", anchor="n")
             if not programs.winfo_children():
-                label(programs, "Geen programma’s beschikbaar.", 10, MUTED, PANEL).pack(anchor="w")
+                label(programs, T("Geen programma’s beschikbaar."), 10, MUTED, PANEL).pack(anchor="w")
 
         def choose(index):
             if not shown or not 0 <= index < len(shown):
@@ -3265,7 +3304,7 @@ class Zono:
             channel.pack(side="left", padx=S(10))
             channel.configure(text=f"{index + 1}  ·  {elide(item['title'], 11, S(300))}")
             now.configure(text=str(item["title"]))
-            when.configure(text=str(item.get("group") or "Live TV"))
+            when.configure(text=str(item.get("group") or T("Live TV")))
             meter.delete("all")
             upcoming.configure(text="")
             big.set_enabled(True)
@@ -3273,24 +3312,24 @@ class Zono:
             fav.update_pill(icon="heart_fill" if item["id"] in self.favorites else "heart")
             if playing or self.play(item, shown):
                 self.set_stage("slot", surface)
-                idle_text.configure(text="Zender laden…")
+                idle_text.configure(text=T("Zender laden…"))
             else:
-                idle_text.configure(text="Deze zender kan niet worden geopend.")
+                idle_text.configure(text=T("Deze zender kan niet worden geopend."))
 
             def watch(session):
                 if not idle_text.winfo_exists():
                     return False
                 if session and session["item"] is item and session.get("failed") and not session.get("reconnecting"):
-                    idle_text.configure(text="Deze zender kan niet worden afgespeeld.")
+                    idle_text.configure(text=T("Deze zender kan niet worden afgespeeld."))
                     self.stop_playback()
                 return True
             self.listeners["slot"] = watch
             for child in programs.winfo_children():
                 child.destroy()
             if not item.get("sid") or not self.source:
-                label(programs, "Geen programmagegevens\nvoor deze bron.", 10, MUTED, PANEL, justify="left").pack(anchor="w")
+                label(programs, T("Geen programmagegevens\nvoor deze bron."), 10, MUTED, PANEL, justify="left").pack(anchor="w")
                 return
-            label(programs, "Programma’s laden…", 10, MUTED, PANEL).pack(anchor="w")
+            label(programs, T("Programma’s laden…"), 10, MUTED, PANEL).pack(anchor="w")
 
             def show(rows_data):
                 if rows[index].winfo_exists():
@@ -3333,7 +3372,7 @@ class Zono:
         texts = tk.Frame(inner, bg=BG)
         texts.pack(side="left", fill="x", expand=True)
         label(texts, elide(item["title"], 11, S(420), True), 11, TEXT, BG, True).pack(anchor="w")
-        group = str(item.get("group") or "Live TV")
+        group = str(item.get("group") or T("Live TV"))
         sub = label(texts, elide(group, 9, S(420)), 9, MUTED)
         sub.pack(anchor="w")
         if item["id"] in self.favorites:
@@ -3351,7 +3390,7 @@ class Zono:
         def set_now(rows_data):
             current = current_program(rows_data)
             if current and current["title"] and sub.winfo_exists():
-                sub.configure(text=elide(f"Nu: {current['title']}", 9, S(420)), fg=SOFT)
+                sub.configure(text=elide(T('Nu: {}').format(current['title']), 9, S(420)), fg=SOFT)
         row.mark = lambda flag: (state.update(selected=flag), paint())
         row.set_now = set_now
         cached = self.guide_cache.get(item.get("sid"))
@@ -3366,16 +3405,16 @@ class Zono:
 
     def guide_view(self, pool, entries):
         archive = any(i.get("archive") for i in pool)
-        self.page_header("TV-gids", "Wat er speelt, wat er komt en wat je kunt terugkijken." if archive
-                         else "Wat er nu en straks op je zenders speelt.")
+        self.page_header(T("TV-gids"), T("Wat er speelt, wat er komt en wat je kunt terugkijken.") if archive
+                         else T("Wat er nu en straks op je zenders speelt."))
         if not pool or not self.source:
             box = tk.Frame(self.content, bg=BG)
             box.pack(fill="x", pady=S(50))
             Pill(box, "", None, kind="ghost", icon="guide", h=72).pack()
-            label(box, "Nog geen programmagids", 17, TEXT, BG, True).pack(pady=(S(16), S(4)))
-            label(box, "De gids werkt met een Xtream Codes-provider. M3U-lijsten bevatten meestal geen gids.",
+            label(box, T("Nog geen programmagids"), 17, TEXT, BG, True).pack(pady=(S(16), S(4)))
+            label(box, T("De gids werkt met een Xtream Codes-provider. M3U-lijsten bevatten meestal geen gids."),
                   10, MUTED).pack()
-            Pill(box, "Provider koppelen", self.configure_source, kind="primary", icon="wifi", h=42).pack(pady=S(18))
+            Pill(box, T("Provider koppelen"), self.configure_source, kind="primary", icon="wifi", h=42).pack(pady=S(18))
             return
         self.category_chips(pool, pady=(0, 16))
         with_guide = [i for i in entries if i.get("sid")]
@@ -3391,8 +3430,8 @@ class Zono:
 
         tools = tk.Frame(self.content, bg=BG)
         tools.pack(fill="x", padx=S(44), pady=(0, S(12)))
-        days = [(-2, "Eergisteren"), (-1, "Gisteren")] if archive else []
-        days += [(0, "Vandaag"), (1, "Morgen")]
+        days = [(-2, T("Eergisteren")), (-1, T("Gisteren"))] if archive else []
+        days += [(0, T("Vandaag")), (1, T("Morgen"))]
         for offset, text in days:
             Pill(tools, text, lambda o=offset: (setattr(self, "guide_day", o), self.render()),
                  kind="chip_on" if offset == self.guide_day else "chip", h=34, px=11.5,
@@ -3413,9 +3452,9 @@ class Zono:
         Pill(tools, "", lambda: timeline.xview_scroll(10, "units"), kind="ghost", icon="next", h=34).pack(side="right")
         Pill(tools, "", lambda: timeline.xview_scroll(-10, "units"), kind="ghost", icon="back", h=34).pack(side="right", padx=S(8))
         if self.guide_day == 0:
-            Pill(tools, "Nu", lambda: scroll_to(now_x - S(160)), kind="chip", icon="clock", h=34, px=11.5).pack(side="right")
+            Pill(tools, T("Nu"), lambda: scroll_to(now_x - S(160)), kind="chip", icon="clock", h=34, px=11.5).pack(side="right")
         if archive:
-            label(tools, "↺  = terugkijken", 9, DIM, BG).pack(side="right", padx=S(14))
+            label(tools, T("↺  = terugkijken"), 9, DIM, BG).pack(side="right", padx=S(14))
 
         tk.Frame(left, bg=BG, height=head_h).pack(fill="x")
         for t in range(start, end + 1, 1800):
@@ -3459,7 +3498,7 @@ class Zono:
                                          tags=(f"row{index}", tag))
                     room -= S(14)
                 if room > S(24):
-                    timeline.create_text(x0 + S(11), y0 + S(9), text=elide(program["title"] or "Programma", 10, room, current),
+                    timeline.create_text(x0 + S(11), y0 + S(9), text=elide(program["title"] or T("Programma"), 10, room, current),
                                          fill=(SOFT if replay else MUTED) if past else TEXT, anchor="nw",
                                          font=(FONT, 10, "bold" if current else "normal"), tags=(f"row{index}", tag))
                     when = f'{hhmm(program["start"])} – {hhmm(program["end"])}'
@@ -3475,13 +3514,13 @@ class Zono:
                 timeline.tag_bind(tag, "<ButtonRelease-1>", lambda _, c=channel, p=program: open_program(c, p))
                 drawn += 1
             if not drawn:
-                timeline.create_text(S(12), (y0 + y1) / 2, text="Geen programma’s op deze dag", fill=DIM, anchor="w",
+                timeline.create_text(S(12), (y0 + y1) / 2, text=T("Geen programma’s op deze dag"), fill=DIM, anchor="w",
                                      font=(FONT, 9), tags=f"row{index}")
             timeline.tag_raise("now")
 
         def no_guide(index):
             if timeline.winfo_exists():
-                timeline.itemconfigure(f"row{index}", text="Geen gidsgegevens")
+                timeline.itemconfigure(f"row{index}", text=T("Geen gidsgegevens"))
 
         for index, item in enumerate(shown):
             row = tk.Frame(left, bg=BG, height=row_h)
@@ -3496,17 +3535,17 @@ class Zono:
             names.pack(side="left")
             label(names, elide(item["title"], 10, left_w - S(100), True), 10, TEXT, BG, True).pack(anchor="w")
             if item.get("archive"):
-                label(names, "↺ terugkijken", 8, ACCENT_SOFT, BG).pack(anchor="w")
+                label(names, T("↺ terugkijken"), 8, ACCENT_SOFT, BG).pack(anchor="w")
             ui.bind_hover(row, lambda r=row: ui.set_bg(r, PANEL), lambda r=row: ui.set_bg(r, BG))
             ui.bind_click(row, lambda i=item: self.open_player(i, shown))
             self.load_logo(logo, item, S(36))
             y0 = head_h + index * row_h + S(5)
-            timeline.create_text(S(12), y0 + row_h / 2 - S(5), text="Gids laden…", fill=DIM, anchor="w",
+            timeline.create_text(S(12), y0 + row_h / 2 - S(5), text=T("Gids laden…"), fill=DIM, anchor="w",
                                  font=(FONT, 9), tags=f"row{index}")
             self.fetch_guide(item, lambda rows_data, i=index, it=item: draw_row(i, it, rows_data),
                              lambda _, i=index: no_guide(i), full=bool(item.get("archive")) or self.guide_day != 0)
         if not shown:
-            label(self.content, "Geen zenders met gidsgegevens in deze selectie.", 11, MUTED).pack(anchor="w", padx=S(44))
+            label(self.content, T("Geen zenders met gidsgegevens in deze selectie."), 11, MUTED).pack(anchor="w", padx=S(44))
         if self.guide_day == 0:
             timeline.create_line(now_x, head_h - S(6), now_x, height, fill=LIVE_RED, width=S(2), tags="now")
             ui.round_rect(timeline, now_x - S(24), S(4), now_x + S(24), S(24), S(9), fill=LIVE_RED, outline="", tags="now")
@@ -3515,7 +3554,7 @@ class Zono:
         elif self.guide_day < 0:
             timeline.after(80, lambda: timeline.winfo_exists() and scroll_to(18 * 3600 * pps))
         if len(with_guide) > len(shown):
-            Pill(self.content, f"Meer zenders  ·  nog {number(len(with_guide) - len(shown))}", self.more,
+            Pill(self.content, T('Meer zenders  ·  nog {}').format(number(len(with_guide) - len(shown))), self.more,
                  kind="ghost").pack(anchor="w", padx=S(44), pady=(0, S(30)))
 
     # ------------------------------------------------------------ downloads + settings
@@ -3561,25 +3600,25 @@ class Zono:
             return
         self.downloaded = [e for e in self.downloaded if e is not entry]
         self.save_downloads()
-        self.toast("Download verwijderd", "trash")
+        self.toast(T("Download verwijderd"), "trash")
         if self.tab == "downloads":
             self.render()
 
     def download(self, item, quiet=False):
         key = item["id"]
         if key in self.download_jobs:
-            self.toast("Deze download is al bezig", "download")
+            self.toast(T("Deze download is al bezig"), "download")
             return
         if self.downloaded_file(key):
             if not quiet:
-                self.toast("Staat al op je pc · te vinden bij Downloads", "check")
+                self.toast(T("Staat al op je pc · te vinden bij Downloads"), "check")
             return
         url = item.get("url", "")
         extension = Path(urlsplit(url).path).suffix.lower()
         if extension not in (".mp4", ".mkv", ".avi", ".webm", ".mov", ".m4v", ".ts"):
-            self.toast("Deze titel kan niet gedownload worden", "close")
+            self.toast(T("Deze titel kan niet gedownload worden"), "close")
             return
-        folder = Path(self.preferences.get("download_folder", data.STATE.parent / "Downloads"))
+        folder = Path(self.preferences.get("download_folder", data.STATE.parent / T("Downloads")))
         title = f"{item['series']} - {item['title']}" if item.get("series") else str(item["title"])
         name = re.sub(r'[^\w -]', "_", title)[:90].strip() or "Zono"
         path = folder / f"{name}-{uuid4().hex[:6]}{extension}"
@@ -3587,7 +3626,7 @@ class Zono:
                "cancel": threading.Event(), "speed": 0.0}
         self.download_jobs[key] = job
         if not quiet:
-            self.toast("Toegevoegd aan Downloads", "download")
+            self.toast(T("Toegevoegd aan Downloads"), "download")
 
         def progress(done, total):
             if job["started"] is None:
@@ -3602,16 +3641,16 @@ class Zono:
             entry = dict(item, file=str(path), saved=time(), size=size, title=item["title"])
             self.downloaded = [e for e in self.downloaded if e.get("id") != key] + [entry]
             self.save_downloads()
-            self.toast(f"Klaar: {elide(title, 10, S(300), True)}", "check")
+            self.toast(T('Klaar: {}').format(elide(title, 10, S(300), True)), "check")
             if self.tab == "downloads":
                 self.render()
 
         def failed(error):
             self.download_jobs.pop(key, None)
             if isinstance(error, data.Cancelled):
-                self.toast("Download geannuleerd", "close")
+                self.toast(T("Download geannuleerd"), "close")
             else:
-                self.toast(f"Download mislukt: {elide(error_text(error), 10, S(380), True)}", "close")
+                self.toast(T('Download mislukt: {}').format(elide(error_text(error), 10, S(380), True)), "close")
             if self.tab == "downloads":
                 self.render()
         job["future"] = self.run(lambda: data.download(url, path, progress, job["cancel"]), finished, failed,
@@ -3624,39 +3663,39 @@ class Zono:
         job["cancel"].set()
         if job.get("future") and job["future"].cancel():
             self.download_jobs.pop(key, None)
-            self.toast("Download geannuleerd", "close")
+            self.toast(T("Download geannuleerd"), "close")
             if self.tab == "downloads":
                 self.render()
 
     @staticmethod
     def size_text(size):
         if size >= 1024 ** 3:
-            return f"{size / 1024 ** 3:.1f} GB".replace(".", ",")
-        return f"{max(1, round(size / 1024 ** 2))} MB"
+            return T('{:.1f} GB').format(size / 1024 ** 3).replace(".", ",")
+        return T('{} MB').format(max(1, round(size / 1024 ** 2)))
 
     def downloads_view(self):
-        folder = self.preferences.get("download_folder", str(data.STATE.parent / "Downloads"))
+        folder = self.preferences.get("download_folder", str(data.STATE.parent / T("Downloads")))
         days = int(self.preferences.get("download_days", 30) or 0)
         total = sum(int(e.get("size") or 0) for e in self.downloaded)
-        summary = f"{len(self.downloaded)} titels op deze pc  ·  {self.size_text(total)}" if self.downloaded else \
-            "Download films en afleveringen om ze zonder internet te bekijken, bijvoorbeeld op het vliegtuig."
-        self.page_header("Downloads", summary)
+        summary = T('{} titels op deze pc  ·  {}').format(len(self.downloaded), self.size_text(total)) if self.downloaded else \
+            T("Download films en afleveringen om ze zonder internet te bekijken, bijvoorbeeld op het vliegtuig.")
+        self.page_header(T("Downloads"), summary)
         area = tk.Frame(self.content, bg=BG)
         area.pack(fill="x", padx=S(44))
         tools = tk.Frame(area, bg=BG)
         tools.pack(fill="x", pady=(0, S(6)))
-        Pill(tools, "Map wijzigen", self.change_folder, kind="ghost", icon="folder").pack(side="left")
+        Pill(tools, T("Map wijzigen"), self.change_folder, kind="ghost", icon="folder").pack(side="left")
         label(tools, elide(folder, 9, S(520)), 9, DIM, BG).pack(side="left", padx=S(12))
         keep = tk.Frame(area, bg=BG)
         keep.pack(fill="x", pady=(S(4), S(18)))
-        label(keep, "Automatisch verwijderen na", 10, SOFT, BG).pack(side="left", padx=(0, S(12)))
-        for value, text in ((7, "7 dagen"), (14, "14 dagen"), (30, "30 dagen"), (0, "Nooit")):
+        label(keep, T("Automatisch verwijderen na"), 10, SOFT, BG).pack(side="left", padx=(0, S(12)))
+        for value, text in ((7, T("7 dagen")), (14, T("14 dagen")), (30, T("30 dagen")), (0, T("Nooit"))):
             Pill(keep, text, lambda v=value: (self.set_pref("download_days", v), self.render()),
                  kind="chip_on" if value == days else "chip", h=32, px=11).pack(side="left", padx=(0, S(8)))
 
         active = [r for r in self.recordings if r.get("status") in ("planned", "recording")]
         if active:
-            label(area, "Opnames", 14, TEXT, BG, True).pack(anchor="w", pady=(S(8), S(8)))
+            label(area, T("Opnames"), 14, TEXT, BG, True).pack(anchor="w", pady=(S(8), S(8)))
             for entry in sorted(active, key=lambda r: r["start"]):
                 row = tk.Frame(area, bg=PANEL, padx=S(16), pady=S(12))
                 row.pack(fill="x", pady=(0, S(6)))
@@ -3668,14 +3707,14 @@ class Zono:
                 texts.pack(side="left", padx=S(14))
                 label(texts, elide(entry["title"], 11, S(520), True), 11, TEXT, PANEL, True).pack(anchor="w")
                 day = datetime.fromtimestamp(entry["start"])
-                when = "vandaag" if day.date() == datetime.now().date() else day.strftime("%d/%m")
-                state_text = "Wordt nu opgenomen" if recording else f"Gepland {when}"
+                when = T("vandaag") if day.date() == datetime.now().date() else day.strftime("%d/%m")
+                state_text = T("Wordt nu opgenomen") if recording else T('Gepland {}').format(when)
                 label(texts, f"{entry['channel']}  ·  {hhmm(entry['start'])} – {hhmm(entry['end'])}  ·  {state_text}",
                       9, MUTED, PANEL).pack(anchor="w")
-                Pill(row, "Stoppen" if recording else "Annuleren", lambda e=entry: self.cancel_recording(e),
+                Pill(row, T("Stoppen") if recording else T("Annuleren"), lambda e=entry: self.cancel_recording(e),
                      kind="ghost", icon="close", h=34, padx=12).pack(side="right")
         if self.download_jobs:
-            label(area, "Bezig", 14, TEXT, BG, True).pack(anchor="w", pady=(S(8), S(8)))
+            label(area, T("Bezig"), 14, TEXT, BG, True).pack(anchor="w", pady=(S(8), S(8)))
             bars = []
             for key, job in list(self.download_jobs.items()):
                 row = tk.Frame(area, bg=PANEL, padx=S(16), pady=S(12))
@@ -3686,7 +3725,7 @@ class Zono:
                 Pill(top, "", lambda k=key: self.cancel_download(k), kind="ghost", icon="close", h=32).pack(side="right")
                 meter = tk.Canvas(row, bg=PANEL, height=S(8), highlightthickness=0)
                 meter.pack(fill="x", pady=(S(8), S(4)))
-                info = label(row, "Wachten…", 9, MUTED, PANEL)
+                info = label(row, T("Wachten…"), 9, MUTED, PANEL)
                 info.pack(anchor="w")
                 bars.append((job, meter, info))
 
@@ -3702,13 +3741,13 @@ class Zono:
                         meter.create_line(S(4), S(4), S(4) + (width - S(8)) * ratio, S(4), width=S(6), fill=ACCENT_SOFT,
                                           capstyle="round")
                         left = (job["total"] - job["done"]) / job["speed"] if job["speed"] else 0
-                        text = f"{round(ratio * 100)}%  ·  {self.size_text(job['done'])} van {self.size_text(job['total'])}"
+                        text = T("{}%  ·  {} van {}").format(round(ratio * 100), self.size_text(job['done']), self.size_text(job['total']))
                         if job["speed"]:
-                            text += f"  ·  {job['speed'] / 1024 ** 2:.1f} MB/s".replace(".", ",")
-                            text += f"  ·  nog {max(1, round(left / 60))} min"
+                            text += T('  ·  {:.1f} MB/s').format(job['speed'] / 1024 ** 2).replace(".", ",")
+                            text += T('  ·  nog {} min').format(max(1, round(left / 60)))
                         info.configure(text=text)
                     elif job["done"]:
-                        info.configure(text=f"{self.size_text(job['done'])} binnen")
+                        info.configure(text=T('{} binnen').format(self.size_text(job['done'])))
                 if self.download_jobs:
                     bars[0][1].after(500, refresh)
                 else:
@@ -3719,11 +3758,11 @@ class Zono:
             box = tk.Frame(area, bg=BG)
             box.pack(fill="x", pady=S(50))
             Pill(box, "", None, kind="ghost", icon="download", h=72).pack()
-            label(box, "Nog geen downloads", 17, TEXT, BG, True).pack(pady=(S(16), S(4)))
-            label(box, "Open een film en kies Download, of kies bij een serie ‘Seizoen downloaden’.", 10, MUTED).pack()
+            label(box, T("Nog geen downloads"), 17, TEXT, BG, True).pack(pady=(S(16), S(4)))
+            label(box, T("Open een film en kies Download, of kies bij een serie ‘Seizoen downloaden’."), 10, MUTED).pack()
             return
         if self.downloaded:
-            label(area, "Op deze pc", 14, TEXT, BG, True).pack(anchor="w", pady=(S(14), S(8)))
+            label(area, T("Op deze pc"), 14, TEXT, BG, True).pack(anchor="w", pady=(S(14), S(8)))
         for entry in sorted(self.downloaded, key=lambda e: -(e.get("saved") or 0)):
             row = tk.Frame(area, bg=BG, padx=S(12), pady=S(8))
             row.pack(fill="x", pady=1)
@@ -3737,8 +3776,8 @@ class Zono:
             details = [self.size_text(int(entry.get("size") or 0))] if entry.get("size") else []
             if days and entry.get("saved"):
                 left = max(0, days - int((time() - entry["saved"]) / 86400))
-                details.append(f"nog {left} dag{'en' if left != 1 else ''} beschikbaar")
-            details.append("speelt offline")
+                details.append((T('nog {} dagen beschikbaar') if left != 1 else T('nog 1 dag beschikbaar')).format(left))
+            details.append(T("speelt offline"))
             label(texts, "  ·  ".join(details), 9, MUTED, BG).pack(anchor="w")
             Pill(row, "", lambda e=entry: self.delete_download(e), kind="ghost", icon="trash", h=36).pack(side="right")
             Pill(row, "", lambda e=entry: self.open_player(e), kind="primary", icon="play", h=36).pack(side="right", padx=S(8))
@@ -3777,12 +3816,12 @@ class Zono:
             label(box, subtitle, 10, MUTED, PANEL).pack(anchor="w", pady=(2, 0))
         return box
 
-    def set_pref(self, key, value, note="Opgeslagen"):
+    def set_pref(self, key, value, note=T("Opgeslagen")):
         self.remember_preference(key, value)
         if note:
             self.toast(note)
 
-    def choice_row(self, parent, title, options, current, key, bg=PANEL, note="Opgeslagen", after=None):
+    def choice_row(self, parent, title, options, current, key, bg=PANEL, note=T("Opgeslagen"), after=None):
         label(parent, title, 10, SOFT, bg).pack(anchor="w", pady=(S(18), S(8)))
         row = tk.Frame(parent, bg=bg)
         row.pack(anchor="w")
@@ -3798,6 +3837,31 @@ class Zono:
             pills[value] = Pill(row, text, lambda v=value: pick(v), kind="chip_on" if value == current else "chip",
                                 h=34, px=11.5)
             pills[value].pack(side="left", padx=(0, S(8)))
+
+    def language_row(self, parent, bg=PANEL):
+        """Nederlands, Français, English, Deutsch: for the whole app (all profiles). Zono restarts in the new language."""
+        label(parent, T("Taal"), 10, SOFT, bg).pack(anchor="w", pady=(S(18), S(8)))
+        row = tk.Frame(parent, bg=bg)
+        row.pack(anchor="w")
+
+        def pick(code):
+            if code == i18n.CODE:
+                return
+            try:
+                i18n.save_language(code)
+            except OSError as error:
+                self.toast(error_text(error), "close")
+                return
+            if self.recorders or self.download_jobs:
+                self.toast(T("De nieuwe taal komt er bij de volgende start van Zono"), "check")
+                return
+            global RESTART
+            RESTART = True
+            self.toast(T("Zono herstart in de nieuwe taal…"), "refresh")
+            self.root.after(700, self.close)
+        for code, name in i18n.LANGUAGES.items():
+            Pill(row, name, lambda c=code: pick(c), kind="chip_on" if code == i18n.CODE else "chip",
+                 h=34, px=11.5).pack(side="left", padx=(0, S(8)))
 
     def switch_row(self, parent, title, text, key, default=True, bg=PANEL, after=None):
         row = tk.Frame(parent, bg=bg)
@@ -3815,11 +3879,11 @@ class Zono:
 
     def settings_view(self):
         kids = bool(self.profile and self.profile.get("kids"))
-        self.page_header("Instellingen", "Wijzigingen worden meteen bewaard.")
+        self.page_header(T("Instellingen"), T("Wijzigingen worden meteen bewaard."))
         area = tk.Frame(self.content, bg=BG)
         area.pack(fill="x", padx=S(44))
 
-        profile = self.panel(area, "Profiel")
+        profile = self.panel(area, T("Profiel"))
         row = tk.Frame(profile, bg=PANEL)
         row.pack(anchor="w", fill="x", pady=(S(14), 0))
         if self.profile:
@@ -3827,24 +3891,25 @@ class Zono:
             texts = tk.Frame(row, bg=PANEL)
             texts.pack(side="left", padx=S(16))
             label(texts, self.profile.get("name", ""), 13, TEXT, PANEL, True).pack(anchor="w")
-            label(texts, ("Kinderprofiel" if kids else "Profiel") + ("  ·  beveiligd met pincode" if self.profile.get("pin") else ""),
+            label(texts, (T("Kinderprofiel") if kids else T("Profiel")) + (T("  ·  beveiligd met pincode") if self.profile.get("pin") else ""),
                   9, MUTED, PANEL).pack(anchor="w")
         buttons = tk.Frame(row, bg=PANEL)
         buttons.pack(side="right")
-        Pill(buttons, "Profiel wisselen", lambda: self.show_profiles(), kind="ghost", icon="swap", h=40, padx=16).pack(side="left")
+        Pill(buttons, T("Profiel wisselen"), lambda: self.show_profiles(), kind="ghost", icon="swap", h=40, padx=16).pack(side="left")
         if not kids:
-            Pill(buttons, "Profielen beheren", lambda: self.show_profiles(True), kind="ghost", icon="pencil",
+            Pill(buttons, T("Profielen beheren"), lambda: self.show_profiles(True), kind="ghost", icon="pencil",
                  h=40, padx=16).pack(side="left", padx=(S(10), 0))
 
-        general = self.panel(area, "Algemeen")
+        general = self.panel(area, T("Algemeen"))
+        self.language_row(general)
         views = ("home", "live", "guide", "movie", "series")
         startup = self.preferences.get("startup", "home")
-        self.choice_row(general, "Startscherm", [(v, TABS[v]) for v in views], startup if startup in views else "home", "startup")
-        self.choice_row(general, "Uitgelichte titels op Ontdekken wisselen", [(0, "Uit"), (5, "5 sec"), (7, "7 sec"), (10, "10 sec")],
+        self.choice_row(general, T("Startscherm"), [(v, TABS[v]) for v in views], startup if startup in views else "home", "startup")
+        self.choice_row(general, T("Uitgelichte titels op Ontdekken wisselen"), [(0, T("Uit")), (5, T("5 sec")), (7, T("7 sec")), (10, T("10 sec"))],
                         self.preferences.get("slide_seconds", 7), "slide_seconds")
 
-        playback = self.panel(area, "Afspelen")
-        label(playback, "Standaardvolume", 10, SOFT, PANEL).pack(anchor="w", pady=(S(18), S(6)))
+        playback = self.panel(area, T("Afspelen||instellingen"))
+        label(playback, T("Standaardvolume"), 10, SOFT, PANEL).pack(anchor="w", pady=(S(18), S(6)))
         volume_row = tk.Frame(playback, bg=PANEL)
         volume_row.pack(anchor="w")
         tk.Label(volume_row, image=ui.pill_photo(icon="volume", kind="quiet", h=28, hover=False, disabled=False),
@@ -3857,85 +3922,85 @@ class Zono:
         Slider(volume_row, 280, self.preferences.get("volume", 75), 100,
                command=lambda v: value.configure(text=f"{int(v)}%"), release=volume_done).pack(side="left", padx=S(8))
         value.pack(side="left")
-        self.choice_row(playback, "Buffer (hoeveel video vooraf geladen wordt)",
-                        [(1000, "Snel  ·  1 sec"), (3000, "Normaal  ·  3 sec"), (8000, "Stabiel  ·  8 sec")],
+        self.choice_row(playback, T("Buffer (hoeveel video vooraf geladen wordt)"),
+                        [(1000, T("Snel  ·  1 sec")), (3000, T("Normaal  ·  3 sec")), (8000, T("Stabiel  ·  8 sec"))],
                         int(self.preferences.get("buffer_ms", 3000)), "buffer_ms",
-                        note="Opgeslagen · geldt vanaf de volgende stream")
-        label(playback, "Hapert je stream? Kies Stabiel. Zappen gaat dan iets trager.", 9, MUTED, PANEL).pack(anchor="w", pady=(S(6), 0))
-        self.switch_row(playback, "Hardwareversnelling", "Gebruikt je grafische kaart voor vloeiender beeld. Zet uit als je beeldfouten ziet.",
+                        note=T("Opgeslagen · geldt vanaf de volgende stream"))
+        label(playback, T("Hapert je stream? Kies Stabiel. Zappen gaat dan iets trager."), 9, MUTED, PANEL).pack(anchor="w", pady=(S(6), 0))
+        self.switch_row(playback, T("Hardwareversnelling"), T("Gebruikt je grafische kaart voor vloeiender beeld. Zet uit als je beeldfouten ziet."),
                         "hw_decode")
-        self.switch_row(playback, "Automatisch opnieuw verbinden", "Probeert tot 3 keer opnieuw als een stream wegvalt.", "reconnect")
-        self.switch_row(playback, "Volgende aflevering automatisch afspelen",
-                        "Tijdens de aftiteling telt Zono af en start daarna de volgende aflevering, zoals bij Netflix.",
+        self.switch_row(playback, T("Automatisch opnieuw verbinden"), T("Probeert tot 3 keer opnieuw als een stream wegvalt."), "reconnect")
+        self.switch_row(playback, T("Volgende aflevering automatisch afspelen"),
+                        T("Tijdens de aftiteling telt Zono af en start daarna de volgende aflevering, zoals bij Netflix."),
                         "autonext")
-        self.switch_row(playback, "Knop ‘Intro overslaan’", "In de eerste minuten van een aflevering: één klik spoelt de "
-                        "intro door (ongeveer anderhalve minuut).", "intro_button")
+        self.switch_row(playback, T("Knop ‘Intro overslaan’"), T("In de eerste minuten van een aflevering: één klik spoelt de "
+                        "intro door (ongeveer anderhalve minuut)."), "intro_button")
         if SAFE_MODE:
             notice = tk.Frame(playback, bg="#2a1f12", padx=S(14), pady=S(10))
             notice.pack(anchor="w", fill="x", pady=(S(18), 0))
-            label(notice, "Veilige start: Zono werd vorige keer niet goed afgesloten, daarom staat live pauzeren even uit.",
+            label(notice, T("Veilige start: Zono werd vorige keer niet goed afgesloten, daarom staat live pauzeren even uit."),
                   10, "#ffd9a8", "#2a1f12").pack(side="left")
-            Pill(notice, "Weer aanzetten", self.leave_safe_mode, kind="primary", h=34, padx=12).pack(side="right")
-        self.choice_row(playback, "Live tv pauzeren en terugspoelen · experimenteel (Zono bewaart de laatste minuten op je pc)",
-                        [(0, "Uit"), (15, "15 min"), (30, "30 min"), (60, "60 min")], self.buffer_minutes(),
-                        "live_buffer_min_v2", note="Geldt vanaf de volgende zender die je opent")
-        label(playback, "Gebruikt tijdelijk schijfruimte: ongeveer 1 tot 4 GB per uur, afhankelijk van de zender. "
-                        "Wordt automatisch gewist.", 9, MUTED, PANEL).pack(anchor="w", pady=(S(6), 0))
-        self.switch_row(playback, "Laatste zender automatisch afspelen", "Live TV start bij het openen met de zender die je het laatst keek.",
+            Pill(notice, T("Weer aanzetten"), self.leave_safe_mode, kind="primary", h=34, padx=12).pack(side="right")
+        self.choice_row(playback, T("Live tv pauzeren en terugspoelen · experimenteel (Zono bewaart de laatste minuten op je pc)"),
+                        [(0, T("Uit")), (15, T("15 min")), (30, T("30 min")), (60, T("60 min"))], self.buffer_minutes(),
+                        "live_buffer_min_v2", note=T("Geldt vanaf de volgende zender die je opent"))
+        label(playback, T("Gebruikt tijdelijk schijfruimte: ongeveer 1 tot 4 GB per uur, afhankelijk van de zender. "
+                        "Wordt automatisch gewist."), 9, MUTED, PANEL).pack(anchor="w", pady=(S(6), 0))
+        self.switch_row(playback, T("Laatste zender automatisch afspelen"), T("Live TV start bij het openen met de zender die je het laatst keek."),
                         "autoplay_live")
-        self.switch_row(playback, "Beeld-in-beeld als je Zono minimaliseert",
-                        "Het beeld speelt verder in een klein venster dat bovenop je andere programma's blijft.", "auto_pip")
+        self.switch_row(playback, T("Beeld-in-beeld als je Zono minimaliseert"),
+                        T("Het beeld speelt verder in een klein venster dat bovenop je andere programma's blijft."), "auto_pip")
 
-        personal = self.panel(area, "Ontdekken en landen")
-        label(personal, "Kies zelf wat Ontdekken toont en in welke volgorde, en welke landen eerst komen.", 10, MUTED,
+        personal = self.panel(area, T("Ontdekken en landen"))
+        label(personal, T("Kies zelf wat Ontdekken toont en in welke volgorde, en welke landen eerst komen."), 10, MUTED,
               PANEL).pack(anchor="w", pady=(S(4), S(12)))
         chosen = self.preferred_countries()
         tools = tk.Frame(personal, bg=PANEL)
         tools.pack(anchor="w")
-        Pill(tools, "Ontdekken aanpassen", self.edit_home, kind="ghost", icon="pencil", h=40, padx=16).pack(side="left")
-        Pill(tools, "Zenders beheren", self.manage_channels, kind="ghost", icon="eye", h=40, padx=16).pack(side="left", padx=(S(10), 0))
-        Pill(tools, "Landen en talen" + (f"  ·  {', '.join(countries.name(c).split(' /')[0] for c in chosen[:3])}" if chosen else ""),
+        Pill(tools, T("Ontdekken aanpassen"), self.edit_home, kind="ghost", icon="pencil", h=40, padx=16).pack(side="left")
+        Pill(tools, T("Zenders beheren"), self.manage_channels, kind="ghost", icon="eye", h=40, padx=16).pack(side="left", padx=(S(10), 0))
+        Pill(tools, T("Landen en talen") + (f"  ·  {', '.join(countries.name(c).split(' /')[0] for c in chosen[:3])}" if chosen else ""),
              self.edit_countries, kind="ghost", icon="live", h=40, padx=16).pack(side="left", padx=S(10))
 
-        guide = self.panel(area, "TV-gids")
-        self.choice_row(guide, "Tijdcorrectie (als de gids niet gelijk loopt met de zender)",
-                        [(-2, "−2 uur"), (-1, "−1 uur"), (0, "Geen"), (1, "+1 uur"), (2, "+2 uur")],
+        guide = self.panel(area, T("TV-gids"))
+        self.choice_row(guide, T("Tijdcorrectie (als de gids niet gelijk loopt met de zender)"),
+                        [(-2, T("−2 uur")), (-1, T("−1 uur")), (0, T("Geen")), (1, T("+1 uur")), (2, T("+2 uur"))],
                         self.preferences.get("epg_offset", 0), "epg_offset", after=lambda _: self.guide_cache.clear())
 
         if not kids:
-            content = self.panel(area, "Inhoud", "Verberg categorieën en titels die een van deze woorden bevatten (gescheiden door komma's).")
+            content = self.panel(area, T("Inhoud"), T("Verberg categorieën en titels die een van deze woorden bevatten (gescheiden door komma's)."))
             words = tk.StringVar(value=self.preferences.get("hidden_words", ""))
-            entry = self.field(content, "Verborgen woorden", words)
+            entry = self.field(content, T("Verborgen woorden"), words)
 
             def store_words(_=None):
                 if words.get().strip() != self.preferences.get("hidden_words", ""):
-                    self.set_pref("hidden_words", words.get().strip(), "Opgeslagen · filter toegepast")
+                    self.set_pref("hidden_words", words.get().strip(), T("Opgeslagen · filter toegepast"))
                     self.set_library(self.state.get("library", []))
             entry.bind("<Return>", store_words)
             entry.bind("<FocusOut>", store_words, add="+")
-            label(content, "Bijvoorbeeld: adult, xxx, sport", 9, DIM, PANEL).pack(anchor="w", pady=(S(6), 0))
+            label(content, T("Bijvoorbeeld: adult, xxx, sport"), 9, DIM, PANEL).pack(anchor="w", pady=(S(6), 0))
 
             if self.source:
-                summary = f"Xtream Codes  ·  {urlsplit(self.source.get('server', '')).hostname or self.source.get('server', '')}"
+                summary = T('Xtream Codes  ·  {}').format(urlsplit(self.source.get('server', '')).hostname or self.source.get('server', ''))
                 if self.state.get("protected") or data.needs_protection(self.state):
-                    summary += "  ·  wachtwoord versleuteld opgeslagen"
+                    summary += T("  ·  wachtwoord versleuteld opgeslagen")
             elif self.library:
-                summary = f"M3U-afspeellijst  ·  {number(len(self.library))} titels"
+                summary = T('M3U-afspeellijst  ·  {} titels').format(number(len(self.library)))
             else:
-                summary = "Nog geen provider gekoppeld."
-            provider = self.panel(area, "Provider", summary)
+                summary = T("Nog geen provider gekoppeld.")
+            provider = self.panel(area, T("Provider"), summary)
             buttons = tk.Frame(provider, bg=PANEL)
             buttons.pack(anchor="w", pady=(S(16), 0))
-            Pill(buttons, "Provider koppelen", self.configure_source, kind="ghost", icon="wifi", h=40).pack(side="left")
+            Pill(buttons, T("Provider koppelen"), self.configure_source, kind="ghost", icon="wifi", h=40).pack(side="left")
             if self.source:
-                Pill(buttons, "Bibliotheek vernieuwen", lambda: self.refresh_library(False), kind="ghost", icon="refresh",
+                Pill(buttons, T("Bibliotheek vernieuwen"), lambda: self.refresh_library(False), kind="ghost", icon="refresh",
                      h=40).pack(side="left", padx=S(10))
 
         if not kids:
-            extra = self.panel(area, "Castfoto's en trailers (optioneel)",
-                               "Met een gratis sleutel van themoviedb.org toont Zono foto's van acteurs, trailers en betere aanraders.")
+            extra = self.panel(area, T("Castfoto's en trailers (optioneel)"),
+                               T("Met een gratis sleutel van themoviedb.org toont Zono foto's van acteurs, trailers en betere aanraders."))
             key_var = tk.StringVar(value=self.preferences.get("tmdb_key", ""))
-            self.field(extra, "TMDB API-sleutel (v3)", key_var, True)
+            self.field(extra, T("TMDB API-sleutel (v3)"), key_var, True)
             buttons = tk.Frame(extra, bg=PANEL)
             buttons.pack(anchor="w", pady=(S(12), 0))
             result = label(buttons, "", 9, MUTED, PANEL)
@@ -3943,26 +4008,26 @@ class Zono:
             def save_key():
                 key = key_var.get().strip()
                 if not key:
-                    self.set_pref("tmdb_key", "", "Sleutel verwijderd")
+                    self.set_pref("tmdb_key", "", T("Sleutel verwijderd"))
                     return
-                result.configure(text="Controleren…", fg=MUTED)
+                result.configure(text=T("Controleren…"), fg=MUTED)
 
                 def ok(_):
                     self.tmdb_cache.clear()
-                    self.set_pref("tmdb_key", key, "Sleutel bewaard · castfoto's staan aan")
+                    self.set_pref("tmdb_key", key, T("Sleutel bewaard · castfoto's staan aan"))
                     if result.winfo_exists():
-                        result.configure(text="✓ Sleutel werkt", fg=ACCENT_SOFT)
+                        result.configure(text=T("✓ Sleutel werkt"), fg=ACCENT_SOFT)
 
                 def bad(_):
                     if result.winfo_exists():
-                        result.configure(text="Deze sleutel werkt niet. Kopieer de ‘API Key (v3)’.", fg="#fda4af")
+                        result.configure(text=T("Deze sleutel werkt niet. Kopieer de ‘API Key (v3)’."), fg="#fda4af")
                 self.run(lambda: tmdb.check_key(key), ok, bad)
-            Pill(buttons, "Opslaan", save_key, kind="ghost", icon="check", h=38, padx=16).pack(side="left")
-            Pill(buttons, "Gratis sleutel aanvragen", lambda: webbrowser.open("https://www.themoviedb.org/settings/api"),
+            Pill(buttons, T("Opslaan"), save_key, kind="ghost", icon="check", h=38, padx=16).pack(side="left")
+            Pill(buttons, T("Gratis sleutel aanvragen"), lambda: webbrowser.open("https://www.themoviedb.org/settings/api"),
                  kind="quiet", icon="next", h=38, padx=14).pack(side="left", padx=S(10))
             result.pack(side="left", padx=S(8))
 
-        storage = self.panel(area, "Opslag en hulp")
+        storage = self.panel(area, T("Opslag en hulp"))
         buttons = tk.Frame(storage, bg=PANEL)
         buttons.pack(anchor="w", pady=(S(16), 0))
 
@@ -3972,26 +4037,26 @@ class Zono:
             self.hero_art.clear()
             self.guide_cache.clear()
             ui.poster_art.cache_clear()
-            self.toast("Cache gewist")
-        Pill(buttons, "Cache wissen", clear_cache, kind="ghost", icon="trash", h=40).pack(side="left")
+            self.toast(T("Cache gewist"))
+        Pill(buttons, T("Cache wissen"), clear_cache, kind="ghost", icon="trash", h=40).pack(side="left")
 
-        Pill(buttons, "Logboek openen", self.show_log, kind="ghost", icon="info", h=40).pack(side="left", padx=S(10))
-        label(storage, "Gaat er iets mis? In het logboek staat wat er gebeurde. Stuur het mee als je hulp vraagt.",
+        Pill(buttons, T("Logboek openen"), self.show_log, kind="ghost", icon="info", h=40).pack(side="left", padx=S(10))
+        label(storage, T("Gaat er iets mis? In het logboek staat wat er gebeurde. Stuur het mee als je hulp vraagt."),
               9, MUTED, PANEL).pack(anchor="w", pady=(S(8), 0))
 
-        keys = self.panel(area, "Sneltoetsen")
+        keys = self.panel(area, T("Sneltoetsen"))
         table = tk.Frame(keys, bg=PANEL)
         table.pack(anchor="w", pady=(S(12), 0))
-        shortcuts = (("Ctrl + F  of  /", "Zoeken"), ("↑  ↓", "Zappen in Live TV en in de speler"),
-                     ("Spatie", "Pauze / verder"), ("←  →", "10 seconden terug / vooruit"),
-                     ("F  of dubbelklik", "Volledig scherm"), ("M", "Geluid aan / uit"),
-                     ("S", "Ondertitels en audio"), ("G", "TV-gids in de speler"), ("T", "Terugkijken in de speler"),
-                     ("C", "Casten naar je tv"), ("P", "Beeld-in-beeld"), ("0 – 9", "Zender kiezen met zijn nummer"),
-                     ("N", "Volgende aflevering"), ("Esc", "Terug / volledig scherm verlaten"))
+        shortcuts = ((T("Ctrl + F  of  /"), T("Zoeken")), ("↑  ↓", T("Zappen in Live TV en in de speler")),
+                     (T("Spatie"), T("Pauze / verder")), ("←  →", T("10 seconden terug / vooruit")),
+                     (T("F  of dubbelklik"), T("Volledig scherm")), ("M", T("Geluid aan / uit")),
+                     ("S", T("Ondertitels en audio")), ("G", T("TV-gids in de speler")), ("T", T("Terugkijken in de speler")),
+                     ("C", T("Casten naar je tv")), ("P", T("Beeld-in-beeld")), ("0 – 9", T("Zender kiezen met zijn nummer")),
+                     ("N", T("Volgende aflevering")), (T("Esc"), T("Terug / volledig scherm verlaten")))
         for index, (key, meaning) in enumerate(shortcuts):
             label(table, key, 10, TEXT, PANEL, True, anchor="w").grid(row=index, column=0, sticky="w", pady=S(3))
             label(table, meaning, 10, MUTED, PANEL, anchor="w").grid(row=index, column=1, sticky="w", padx=(S(30), 0))
-        label(area, f"Zono Desktop {VERSION}  ·  Ingebouwde VideoLAN-videomotor", 9, DIM).pack(anchor="w", pady=(S(8), S(30)))
+        label(area, T('Zono Desktop {}  ·  Ingebouwde VideoLAN-videomotor').format(VERSION), 9, DIM).pack(anchor="w", pady=(S(8), S(30)))
 
     # ------------------------------------------------------------ dialogs
 
@@ -4021,14 +4086,14 @@ class Zono:
 
     def configure_source(self):
         if self.profile and self.profile.get("kids"):
-            self.toast("Niet beschikbaar in een kinderprofiel", "lock")
+            self.toast(T("Niet beschikbaar in een kinderprofiel"), "lock")
             return
         window = self.sheet(560, 640)
         frame = tk.Frame(window, bg=SIDE, padx=S(34), pady=S(30))
         frame.pack(fill="both", expand=True)
-        label(frame, "Provider koppelen", 20, TEXT, SIDE, True).pack(anchor="w")
-        label(frame, "Koppel je IPTV-abonnement via Xtream Codes of een M3U-afspeellijst. "
-                     "Je wachtwoord wordt versleuteld bewaard op deze computer.", 10, MUTED, SIDE,
+        label(frame, T("Provider koppelen"), 20, TEXT, SIDE, True).pack(anchor="w")
+        label(frame, T("Koppel je IPTV-abonnement via Xtream Codes of een M3U-afspeellijst. "
+                     "Je wachtwoord wordt versleuteld bewaard op deze computer."), 10, MUTED, SIDE,
               wraplength=S(480), justify="left").pack(anchor="w", pady=(S(4), S(18)))
         mode = {"value": 0 if self.source or not self.library else 1}
         segment = tk.Frame(frame, bg=SIDE)
@@ -4047,18 +4112,18 @@ class Zono:
             for child in fields.winfo_children():
                 child.destroy()
             if mode["value"] == 0:
-                for index, name in enumerate(("Serveradres", "Gebruikersnaam", "Wachtwoord")):
+                for index, name in enumerate((T("Serveradres"), T("Gebruikersnaam"), T("Wachtwoord"))):
                     self.field(fields, name, values[index], index == 2)
             else:
                 self.field(fields, "M3U-link", link)
-                self.field(fields, "Of een lokaal bestand", path)
+                self.field(fields, T("Of een lokaal bestand"), path)
 
                 def browse():
-                    chosen = filedialog.askopenfilename(parent=self.root, filetypes=[("M3U", "*.m3u *.m3u8"), ("Alle bestanden", "*.*")])
+                    chosen = filedialog.askopenfilename(parent=self.root, filetypes=[("M3U", "*.m3u *.m3u8"), (T("Alle bestanden"), "*.*")])
                     if chosen:
                         path.set(chosen)
-                Pill(fields, "Bestand kiezen", browse, kind="ghost", icon="folder", h=36).pack(anchor="w", pady=(S(10), 0))
-        for value, text in ((0, "Xtream Codes"), (1, "M3U")):
+                Pill(fields, T("Bestand kiezen"), browse, kind="ghost", icon="folder", h=36).pack(anchor="w", pady=(S(10), 0))
+        for value, text in ((0, T("Xtream Codes")), (1, "M3U")):
             tabs[value] = Pill(segment, text, lambda v=value: switch(v), kind="chip", h=34, px=11.5)
             tabs[value].pack(side="left", padx=(0, S(8)))
         switch()
@@ -4090,7 +4155,7 @@ class Zono:
                 self.stop_playback()
                 window.close()
                 self.select("home")
-                self.toast(f"Bibliotheek geladen  ·  {number(len(entries))} titels" if entries else "Provider gewist")
+                self.toast(T('Bibliotheek geladen  ·  {} titels').format(number(len(entries))) if entries else T("Provider gewist"))
             window.closable = False
 
             def save_failed(error):
@@ -4103,37 +4168,37 @@ class Zono:
             local, remote = path.get().strip(), link.get().strip()
             start.set_enabled(False)
             clear.set_enabled(False)
-            status.configure(text="Bibliotheek laden… dit kan bij grote providers even duren.")
+            status.configure(text=T("Bibliotheek laden… dit kan bij grote providers even duren."))
 
             def load():
                 if source is not None:
                     if not all(source.values()):
-                        raise ValueError("Vul alle Xtream-velden in.")
+                        raise ValueError(T("Vul alle Xtream-velden in."))
                     return data.catalog(source)
                 if local:
                     with Path(local).open("rb") as handle:
                         raw = handle.read(data.SOURCE_LIMIT + 1)
                     if len(raw) > data.SOURCE_LIMIT:
-                        raise ValueError("Dit M3U-bestand is groter dan 256 MiB.")
+                        raise ValueError(T("Dit M3U-bestand is groter dan 256 MiB."))
                     return data.parse_m3u(raw.decode("utf-8-sig", errors="replace"))
                 if not remote:
-                    raise ValueError("Vul een M3U-link in of kies een bestand.")
+                    raise ValueError(T("Vul een M3U-link in of kies een bestand."))
                 return data.parse_m3u(data.fetch(remote))
 
             def loaded(entries):
                 if not entries:
-                    fail(ValueError("De bron bevat geen herkenbare titels."))
+                    fail(ValueError(T("De bron bevat geen herkenbare titels.")))
                 else:
                     commit(entries, source, bool(source and source == self.source))
             self.run(load, loaded, fail)
 
         def erase():
-            if messagebox.askyesno("Bron wissen", "Bron, favorieten en kijkvoortgang wissen?", parent=self.root):
+            if messagebox.askyesno(T("Bron wissen"), T("Bron, favorieten en kijkvoortgang wissen?"), parent=self.root):
                 start.set_enabled(False)
                 clear.set_enabled(False)
                 commit([], None)
-        start = Pill(actions, "Bibliotheek laden", submit, kind="primary", h=42, padx=22)
-        clear = Pill(actions, "Bron wissen", erase, kind="danger", h=42, padx=20)
+        start = Pill(actions, T("Bibliotheek laden"), submit, kind="primary", h=42, padx=22)
+        clear = Pill(actions, T("Bron wissen"), erase, kind="danger", h=42, padx=20)
         start.pack(side="left", padx=(0, S(10)))
         clear.pack(side="left")
 
@@ -4157,7 +4222,7 @@ class Zono:
             messagebox.showerror("Zono", error_text(error), parent=parent or self.root)
             return key in self.favorites
         if parent is None:
-            self.toast("Bewaard in je favorieten" if key in self.favorites else "Verwijderd uit je favorieten",
+            self.toast(T("Bewaard in je favorieten") if key in self.favorites else T("Verwijderd uit je favorieten"),
                        "heart_fill" if key in self.favorites else "heart")
         return key in self.favorites
 
@@ -4208,9 +4273,9 @@ class Zono:
         window = self.sheet(620, 640)
         frame = tk.Frame(window, bg=SIDE, padx=S(34), pady=S(30))
         frame.pack(fill="both", expand=True)
-        label(frame, "Kijken op je telefoon", 20, TEXT, SIDE, True).pack(anchor="w")
-        label(frame, "Kijk je zenders, films en series op je iPhone, iPad, tv-box of in de browser van je smart-tv. "
-                     "Met AirPlay stuur je het beeld vanaf je iPhone naar je Apple TV.", 10, MUTED, SIDE,
+        label(frame, T("Kijken op je telefoon"), 20, TEXT, SIDE, True).pack(anchor="w")
+        label(frame, T("Kijk je zenders, films en series op je iPhone, iPad, tv-box of in de browser van je smart-tv. "
+                     "Met AirPlay stuur je het beeld vanaf je iPhone naar je Apple TV."), 10, MUTED, SIDE,
               wraplength=S(540), justify="left").pack(anchor="w", pady=(S(4), S(16)))
         row = tk.Frame(frame, bg=SIDE)
         row.pack(anchor="w", fill="x")
@@ -4221,7 +4286,7 @@ class Zono:
             for child in body.winfo_children():
                 child.destroy()
             if not self.remote.running:
-                label(body, "Zet delen aan om een QR-code te krijgen.", 10, DIM, SIDE).pack(anchor="w")
+                label(body, T("Zet delen aan om een QR-code te krijgen."), 10, DIM, SIDE).pack(anchor="w")
                 return
             columns = tk.Frame(body, bg=SIDE)
             columns.pack(anchor="w")
@@ -4229,15 +4294,15 @@ class Zono:
             steps = tk.Frame(columns, bg=SIDE)
             steps.pack(side="left", anchor="n", padx=(S(26), 0))
             for number_, text in enumerate((
-                    "Verbind je telefoon met hetzelfde wifi als deze pc.",
-                    "Open de camera en scan de QR-code.",
-                    "Tik op een zender, film of aflevering.",
-                    "Apple TV: tik in de speler op het AirPlay-icoon en kies je Apple TV."), 1):
+                    T("Verbind je telefoon met hetzelfde wifi als deze pc."),
+                    T("Open de camera en scan de QR-code."),
+                    T("Tik op een zender, film of aflevering."),
+                    T("Apple TV: tik in de speler op het AirPlay-icoon en kies je Apple TV.")), 1):
                 line = tk.Frame(steps, bg=SIDE)
                 line.pack(anchor="w", pady=(0, S(10)))
                 Pill(line, str(number_), None, kind="accent", h=24, px=10, weight="bold").pack(side="left", anchor="n")
                 label(line, text, 10, SOFT, SIDE, wraplength=S(250), justify="left").pack(side="left", padx=(S(10), 0))
-            label(body, "Vraagt Windows om toegang voor Zono in je netwerk? Kies dan ‘Toegang toestaan’ voor privénetwerken.",
+            label(body, T("Vraagt Windows om toegang voor Zono in je netwerk? Kies dan ‘Toegang toestaan’ voor privénetwerken."),
                   9, DIM, SIDE, wraplength=S(540), justify="left").pack(anchor="w", pady=(S(14), 0))
 
         def changed(value):
@@ -4246,8 +4311,8 @@ class Zono:
         Switch(row, self.remote.running, changed).pack(side="left")
         texts = tk.Frame(row, bg=SIDE)
         texts.pack(side="left", padx=S(14))
-        label(texts, "Delen in mijn wifi", 11, TEXT, SIDE, True).pack(anchor="w")
-        label(texts, "Alleen toestellen met de QR-code kunnen meekijken. Zono moet hiervoor open staan.",
+        label(texts, T("Delen in mijn wifi"), 11, TEXT, SIDE, True).pack(anchor="w")
+        label(texts, T("Alleen toestellen met de QR-code kunnen meekijken. Zono moet hiervoor open staan."),
               9, MUTED, SIDE).pack(anchor="w")
         show()
 
@@ -4268,7 +4333,7 @@ class Zono:
         self.search_var = tk.StringVar()
         self.search = tk.Entry(self.search_field, textvariable=self.search_var, bg=PANEL, fg=TEXT,
                                insertbackground=TEXT, relief="flat", bd=0, highlightthickness=0, font=(FONT, 11))
-        self.search_hint = label(self.search_field, "Films, series of zenders", 11, DIM, PANEL, cursor="xterm")
+        self.search_hint = label(self.search_field, T("Films, series of zenders"), 11, DIM, PANEL, cursor="xterm")
         self.search_hint.bind("<Button-1>", lambda _: self.search.focus_set())
         self.search_x = Pill(self.search_field, "", self.close_search, kind="quiet", icon="close", h=30, bg=PANEL)
         self.search_field.configure(cursor="xterm")
@@ -4457,10 +4522,10 @@ class Zono:
         width = self.field_width() + S(80)
         tk.Frame(panel, bg=SIDE, width=width, height=S(2)).pack()
         if not total:
-            label(panel, f"Niets gevonden voor “{self.search_var.get().strip()}”", 10, MUTED, SIDE).pack(
+            label(panel, T('Niets gevonden voor “{}”').format(self.search_var.get().strip()), 10, MUTED, SIDE).pack(
                 anchor="w", padx=S(18), pady=S(16))
         lives = groups["live"]
-        for kind, heading in (("movie", "FILMS"), ("series", "SERIES"), ("live", "ZENDERS")):
+        for kind, heading in (("movie", T("FILMS")), ("series", T("SERIES")), ("live", T("ZENDERS"))):
             if not groups[kind]:
                 continue
             label(panel, heading, 8, DIM, SIDE, True).pack(anchor="w", padx=S(18), pady=(S(10), S(4)))
@@ -4469,8 +4534,8 @@ class Zono:
         if total:
             footer = tk.Frame(panel, bg=SIDE, padx=S(18), pady=S(12), cursor="hand2")
             footer.pack(fill="x", pady=(S(6), 0))
-            label(footer, f"Alle {number(total)} resultaten bekijken", 10, ACCENT_SOFT, SIDE, True).pack(side="left")
-            label(footer, "Enter", 9, DIM, SIDE).pack(side="right")
+            label(footer, T('Alle {} resultaten bekijken').format(number(total)), 10, ACCENT_SOFT, SIDE, True).pack(side="left")
+            label(footer, T("Enter"), 9, DIM, SIDE).pack(side="right")
             ui.bind_hover(footer, lambda: ui.set_bg(footer, RAISED), lambda: ui.set_bg(footer, SIDE))
             ui.bind_click(footer, self.show_search_page)
         card.place(relx=1, x=-S(34), y=S(74), anchor="ne")
@@ -4632,13 +4697,13 @@ class Zono:
             if session["live"]:
                 position = session["position"]
                 behind = self.live_offset()
-                sub = (("LIVE" if behind < 5 else f"−{clock(behind)} achter live") + (f"  ·  {position + 1}" if position >= 0 else ""))
+                sub = (("LIVE" if behind < 5 else T('−{} achter live').format(clock(behind))) + (f"  ·  {position + 1}" if position >= 0 else ""))
             else:
                 length = self.engine.media_player_get_length(self.engine.player)
                 moment = self.engine.media_player_get_time(self.engine.player)
-                sub = f"{clock(moment / 1000)} / {clock(length / 1000)}" if length > 0 and moment >= 0 else "Laden…"
+                sub = f"{clock(moment / 1000)} / {clock(length / 1000)}" if length > 0 and moment >= 0 else T("Laden…")
             if session.get("count_until"):
-                sub = f"Volgende aflevering over {max(0, int(session['count_until'] - monotonic()) + 1)} s"
+                sub = T('Volgende aflevering over {} s').format(max(0, int(session['count_until'] - monotonic()) + 1))
             self.mini_sub.configure(text=sub)
             icon = "pause" if session.get("view_state", session.get("state")) == 3 else "play"
             if self.mini_play.opts["icon"] != icon:
@@ -4661,7 +4726,7 @@ class Zono:
 
     def play(self, item, playlist=None):
         if not self.ensure_engine():
-            self.toast("De ingebouwde videospeler kon niet starten", "close")
+            self.toast(T("De ingebouwde videospeler kon niet starten"), "close")
             return False
         if self.session and not self.session["live"]:
             self.remember_progress()
@@ -4694,7 +4759,7 @@ class Zono:
                 self.engine.open(url, options)
             trace("afspelen gestart")
         except (ValueError, OSError, KeyError):
-            self.toast("Deze titel kan niet worden geopend", "close")
+            self.toast(T("Deze titel kan niet worden geopend"), "close")
             return False
         playlist = [e for e in (playlist or []) if e.get("url") or e.get("file")]
         position = next((i for i, e in enumerate(playlist) if e.get("id") == item.get("id")), -1)
@@ -4720,7 +4785,7 @@ class Zono:
 
     def play_options(self):
         buffer = int(self.preferences.get("buffer_ms", 3000) or 3000)
-        options = [f":network-caching={buffer}", f":live-caching={buffer}", ":http-reconnect"]
+        options = [':network-caching={}'.format(buffer), f":live-caching={buffer}", ":http-reconnect"]
         options.append(":avcodec-hw=any" if self.preferences.get("hw_decode", True) else ":avcodec-hw=none")
         return options
 
@@ -4790,19 +4855,19 @@ class Zono:
 
     def explain_rewind(self, session):
         if SAFE_MODE:
-            text = "Terugspoelen staat even uit: veilige start. Zet het weer aan bij Instellingen › Afspelen"
+            text = T("Terugspoelen staat even uit: veilige start. Zet het weer aan bij Instellingen › Afspelen")
         elif self.buffer_failed:
-            text = "Terugspoelen is uitgeschakeld omdat de zender er niet goed mee speelde · herstart Zono om opnieuw te proberen"
+            text = T("Terugspoelen is uitgeschakeld omdat de zender er niet goed mee speelde · herstart Zono om opnieuw te proberen")
         elif not self.buffer_minutes():
-            text = "Terugspoelen is een proefoptie · zet ‘Live tv pauzeren’ aan bij Instellingen › Afspelen"
+            text = T("Terugspoelen is een proefoptie · zet ‘Live tv pauzeren’ aan bij Instellingen › Afspelen")
         else:
-            text = "Terugspoelen lukt niet bij deze zender"
+            text = T("Terugspoelen lukt niet bij deze zender")
         self.toast(text, "info")
 
     def leave_safe_mode(self):
         global SAFE_MODE
         SAFE_MODE = False
-        self.toast("Live pauzeren staat weer aan · geldt vanaf de volgende zender", "check")
+        self.toast(T("Live pauzeren staat weer aan · geldt vanaf de volgende zender"), "check")
         if self.tab == "settings":
             self.render()
 
@@ -4870,7 +4935,7 @@ class Zono:
             return False
         kept = buffer.seconds_kept()
         if kept < 10:
-            self.toast("Zono bouwt nog een buffer op · probeer het over een paar seconden", "clock")
+            self.toast(T("Zono bouwt nog een buffer op · probeer het over een paar seconden"), "clock")
             return False
         offset = max(6, min(offset, kept - 4))
         try:
@@ -4882,7 +4947,7 @@ class Zono:
             self.engine.open(buffer.index_uri(), options)
         except (OSError, ValueError, AttributeError) as error:
             data.log_error(f"Terugspoelen: {error!r}")
-            self.toast("Terugspoelen lukt nu niet", "close")
+            self.toast(T("Terugspoelen lukt nu niet"), "close")
             return False
         session.update(url=buffer.index_uri(), state=None, failed=False, ended=False, offset=offset,
                        options=[":adaptive-livedelay=6000", ":network-caching=500", options[-1]],
@@ -5083,13 +5148,13 @@ class Zono:
             if self.preferences.get("reconnect", True) and session["retries"] < 3:
                 session["retries"] += 1
                 session["reconnecting"] = True
-                self.toast(f"Verbinding weggevallen · opnieuw verbinden ({session['retries']}/3)", "refresh")
+                self.toast(T('Verbinding weggevallen · opnieuw verbinden ({}/3)').format(session['retries']), "refresh")
                 self.reconnect_job = self.root.after(1500, lambda: self.retry(session))
             else:
                 session["reconnecting"] = False
                 busy = bool(self.recorders) or (self.remote.running and self.remote.converter)
-                self.toast("Deze stream start niet · " + ("er loopt nog een opname of een stream naar je telefoon"
-                                                          if busy else "probeer een andere zender of herstart Zono"), "close")
+                self.toast(T("Deze stream start niet · ") + (T("er loopt nog een opname of een stream naar je telefoon")
+                                                          if busy else T("probeer een andere zender of herstart Zono")), "close")
         elif state == 6 and not session["ended"]:
             session["ended"] = True
             self.remember_progress(ended=True)
@@ -5112,7 +5177,7 @@ class Zono:
                 self.open_player(following, playlist, fullscreen=bool(self.player_full))
             else:
                 self.play(following, playlist)
-                self.toast(f"Volgende: {elide(following.get('title', ''), 10, S(300), True)}", "play")
+                self.toast(T('Volgende: {}').format(elide(following.get('title', ''), 10, S(300), True)), "play")
         for name, listener in list(self.listeners.items()):
             try:
                 if listener(self.session) is False:
@@ -5500,7 +5565,7 @@ class Zono:
             self.queue_place()
             top = tk.Frame(panel, bg=SIDE)
             top.pack(fill="x")
-            label(top, "Casten", 14, TEXT, SIDE, True).pack(side="left")
+            label(top, T("Casten"), 14, TEXT, SIDE, True).pack(side="left")
             Pill(top, "", close_panel, kind="ghost", icon="close", h=32).pack(side="right")
             body = tk.Frame(panel, bg=SIDE)
             body.pack(fill="both", expand=True, pady=(S(10), 0))
@@ -5517,7 +5582,7 @@ class Zono:
                     device = self.casting["device"]
                     box = tk.Frame(body, bg=RAISED, padx=S(14), pady=S(12))
                     box.pack(fill="x", pady=(S(6), 0))
-                    label(box, "SPEELT AF OP", 8, ACCENT_SOFT, RAISED, True).pack(anchor="w")
+                    label(box, T("SPEELT AF OP"), 8, ACCENT_SOFT, RAISED, True).pack(anchor="w")
                     label(box, elide(device["name"], 12, S(300), True), 12, TEXT, RAISED, True).pack(anchor="w")
                     label(box, elide(self.casting["title"], 10, S(300)), 10, MUTED, RAISED).pack(anchor="w")
                     buttons = tk.Frame(box, bg=RAISED)
@@ -5526,13 +5591,13 @@ class Zono:
                          kind="ghost", icon="pause", h=36).pack(side="left")
                     Pill(buttons, "", lambda: self.run(lambda: cast.resume(device), lambda _: None, lambda _: None),
                          kind="ghost", icon="play", h=36).pack(side="left", padx=S(8))
-                    Pill(buttons, "Stoppen op tv", lambda: stop_cast(device), kind="danger", icon="close", h=36).pack(side="left")
-                section("TV'S IN JE NETWERK")
+                    Pill(buttons, T("Stoppen op tv"), lambda: stop_cast(device), kind="danger", icon="close", h=36).pack(side="left")
+                section(T("TV'S IN JE NETWERK"))
                 if searching:
-                    label(body, "Zoeken naar tv's…", 10, MUTED, SIDE).pack(anchor="w")
+                    label(body, T("Zoeken naar tv's…"), 10, MUTED, SIDE).pack(anchor="w")
                 elif not devices:
-                    label(body, "Geen tv gevonden. Staat je tv aan en zit hij op hetzelfde wifi? Bij een LG-tv: zet in Instellingen › "
-                          "Algemeen › Apparaten de optie ‘LG Connect Apps’ (of ‘Scherm delen’) aan.", 10, MUTED, SIDE,
+                    label(body, T("Geen tv gevonden. Staat je tv aan en zit hij op hetzelfde wifi? Bij een LG-tv: zet in Instellingen › "
+                          "Algemeen › Apparaten de optie ‘LG Connect Apps’ (of ‘Scherm delen’) aan."), 10, MUTED, SIDE,
                           wraplength=S(320), justify="left").pack(anchor="w")
                 for device in devices or []:
                     line = tk.Frame(body, bg=SIDE, padx=S(10), pady=S(9), cursor="hand2")
@@ -5547,14 +5612,14 @@ class Zono:
                     ui.bind_hover(line, lambda l=line: ui.set_bg(l, RAISED), lambda l=line: ui.set_bg(l, SIDE))
                     ui.bind_click(line, lambda d=device: start_cast(d))
                 if not searching:
-                    Pill(body, "Opnieuw zoeken", search, kind="quiet", icon="refresh", h=34, padx=12).pack(anchor="w", pady=(S(6), 0))
+                    Pill(body, T("Opnieuw zoeken"), search, kind="quiet", icon="refresh", h=34, padx=12).pack(anchor="w", pady=(S(6), 0))
                 section("APPLE TV")
-                label(body, "Open Zono op je iPhone en tik in de speler op het AirPlay-icoon.", 10, SOFT, SIDE,
+                label(body, T("Open Zono op je iPhone en tik in de speler op het AirPlay-icoon."), 10, SOFT, SIDE,
                       wraplength=S(320), justify="left").pack(anchor="w")
                 if self.remote.running:
                     self.share_qr(body, SIDE, 150).pack(anchor="w", pady=(S(10), 0))
                 else:
-                    Pill(body, "QR-code voor iPhone tonen", lambda: (self.set_sharing(True), render_panel(devices)),
+                    Pill(body, T("QR-code voor iPhone tonen"), lambda: (self.set_sharing(True), render_panel(devices)),
                          kind="ghost", icon="phone", h=38, padx=14).pack(anchor="w", pady=(S(10), 0))
 
             def search():
@@ -5567,24 +5632,24 @@ class Zono:
                 if not current:
                     return
                 title = current["item"].get("title", "Zono")
-                self.toast(f"Verbinden met {elide(device['name'], 10, S(240), True)}…", "cast")
+                self.toast(T('Verbinden met {}…').format(elide(device['name'], 10, S(240), True)), "cast")
 
                 def done(_):
                     self.casting = {"device": device, "title": title}
                     if self.engine and current.get("state") == 3:
                         self.toggle_pause()
-                    self.toast(f"Speelt af op {elide(device['name'], 10, S(260), True)}", "cast")
+                    self.toast(T('Speelt af op {}').format(elide(device['name'], 10, S(260), True)), "cast")
                     render_panel(state.get("devices"))
 
                 def failed(error):
-                    self.toast("De tv weigerde deze stream. Probeer een andere zender of film.", "close")
+                    self.toast(T("De tv weigerde deze stream. Probeer een andere zender of film."), "close")
                 self.run(lambda: cast.play(device, current["url"], title), done, failed)
 
             def stop_cast(device):
                 self.casting = None
                 self.run(lambda: cast.stop(device), lambda _: None, lambda _: None)
                 render_panel(state.get("devices"))
-                self.toast("Casten gestopt", "cast")
+                self.toast(T("Casten gestopt"), "cast")
 
             original_render = render_panel
 
@@ -5604,7 +5669,7 @@ class Zono:
             self.queue_place()
             top = tk.Frame(panel, bg=SIDE)
             top.pack(fill="x")
-            label(top, "Ondertitels en audio", 14, TEXT, SIDE, True).pack(side="left")
+            label(top, T("Ondertitels en audio"), 14, TEXT, SIDE, True).pack(side="left")
             Pill(top, "", close_panel, kind="ghost", icon="close", h=32).pack(side="right")
             scroller = tk.Canvas(panel, bg=SIDE, highlightthickness=0, bd=0, yscrollincrement=S(12))
             scroller.pack(fill="both", expand=True, pady=(S(12), 0))
@@ -5624,7 +5689,7 @@ class Zono:
                 def check():
                     if body.winfo_exists() and engine is self.engine:
                         note["text"] = "" if engine.current_track(kind) == track_id else \
-                            "Dit spoor kon niet worden ingeschakeld. Probeer een ander spoor."
+                            T("Dit spoor kon niet worden ingeschakeld. Probeer een ander spoor.")
                         fill(99)
                 body.after(400, check)
 
@@ -5632,17 +5697,17 @@ class Zono:
                 engine = self.engine
                 if not engine:
                     return
-                chosen = filedialog.askopenfilename(parent=self.root, title="Ondertitelbestand kiezen",
-                                                    filetypes=[("Ondertitels", "*.srt *.ass *.ssa *.vtt *.sub"),
-                                                               ("Alle bestanden", "*.*")])
+                chosen = filedialog.askopenfilename(parent=self.root, title=T("Ondertitelbestand kiezen"),
+                                                    filetypes=[(T("Ondertitels"), "*.srt *.ass *.ssa *.vtt *.sub"),
+                                                               (T("Alle bestanden"), "*.*")])
                 if not chosen:
                     return
                 if engine.add_subtitle(chosen):
                     note["text"] = ""
-                    self.toast("Ondertitels geladen", "cc")
+                    self.toast(T("Ondertitels geladen"), "cc")
                     body.after(800, lambda: fill(99))
                 else:
-                    note["text"] = "Dit bestand kon niet als ondertitel worden geladen."
+                    note["text"] = T("Dit bestand kon niet als ondertitel worden geladen.")
                     fill(99)
 
             def fill(attempt=0):
@@ -5654,7 +5719,7 @@ class Zono:
                 found = False
                 if note["text"]:
                     label(body, note["text"], 10, "#ff8a95", SIDE, wraplength=S(300), justify="left").pack(anchor="w", pady=(0, S(6)))
-                for kind, heading in (("audio", "AUDIO"), ("subtitles", "ONDERTITELS")):
+                for kind, heading in (("audio", T("AUDIO")), ("subtitles", T("ONDERTITELS"))):
                     tracks = engine.tracks(kind) if engine else []
                     if not tracks:
                         continue
@@ -5662,7 +5727,7 @@ class Zono:
                     current = engine.current_track(kind)
                     label(body, heading, 8, DIM, SIDE, True).pack(anchor="w", pady=(S(10), S(4)))
                     for track_id, name in tracks:
-                        name = "Uit" if name.casefold() in ("disable", "disabled") else name
+                        name = T("Uit") if name.casefold() in ("disable", "disabled") else name
                         active = track_id == current
                         line = tk.Frame(body, bg=RAISED if active else SIDE, padx=S(10), pady=S(8), cursor="hand2")
                         line.pack(fill="x", pady=1)
@@ -5674,14 +5739,14 @@ class Zono:
                         ui.bind_click(line, lambda k=kind, t=track_id: choose(k, t))
                 waiting = attempt < 12
                 if not found:
-                    label(body, "Sporen laden…" if waiting else "Deze stream heeft geen extra audio of ingebouwde ondertitels.",
+                    label(body, T("Sporen laden…") if waiting else T("Deze stream heeft geen extra audio of ingebouwde ondertitels."),
                           10, MUTED, SIDE, wraplength=S(300), justify="left").pack(anchor="w")
                 session = self.session
                 if session and not session["live"]:
-                    label(body, "EIGEN ONDERTITELS", 8, DIM, SIDE, True).pack(anchor="w", pady=(S(18), S(4)))
-                    label(body, "Heb je een .srt-bestand voor deze film of aflevering? Laad het hier.", 9, MUTED, SIDE,
+                    label(body, T("EIGEN ONDERTITELS"), 8, DIM, SIDE, True).pack(anchor="w", pady=(S(18), S(4)))
+                    label(body, T("Heb je een .srt-bestand voor deze film of aflevering? Laad het hier."), 9, MUTED, SIDE,
                           wraplength=S(300), justify="left").pack(anchor="w", pady=(0, S(8)))
-                    Pill(body, "Ondertitelbestand openen", load_file, kind="ghost", icon="cc", h=36, padx=12).pack(anchor="w")
+                    Pill(body, T("Ondertitelbestand openen"), load_file, kind="ghost", icon="cc", h=36, padx=12).pack(anchor="w")
                 scroller.yview_moveto(0) if attempt == 0 else None
                 if not found and waiting:
                     body.after(1000, lambda: fill(attempt + 1))
@@ -5697,7 +5762,7 @@ class Zono:
             self.queue_place()
             top = tk.Frame(panel, bg=SIDE)
             top.pack(fill="x")
-            label(top, "Terugkijken", 14, TEXT, SIDE, True).pack(side="left")
+            label(top, T("Terugkijken"), 14, TEXT, SIDE, True).pack(side="left")
             Pill(top, "", close_panel, kind="ghost", icon="close", h=32).pack(side="right")
             label(panel, elide(item["title"], 10, S(300)), 10, MUTED, SIDE).pack(anchor="w", pady=(S(2), S(10)))
             holder = tk.Frame(panel, bg=SIDE)
@@ -5711,7 +5776,7 @@ class Zono:
             listing.create_window(0, 0, window=rows, anchor="nw", width=S(320))
             rows.bind("<Configure>", lambda _: listing.configure(scrollregion=listing.bbox("all")))
             listing.bind("<MouseWheel>", lambda e: listing.yview_scroll(-int(e.delta / 120) * 2, "units"))
-            label(rows, "Programma’s laden…", 10, MUTED, SIDE).pack(anchor="w")
+            label(rows, T("Programma’s laden…"), 10, MUTED, SIDE).pack(anchor="w")
 
             def fill(entries):
                 if not rows.winfo_exists():
@@ -5724,20 +5789,20 @@ class Zono:
                 heading = None
                 for entry in past[:80]:
                     day = datetime.fromtimestamp(entry["start"]).date()
-                    name = "Vandaag" if day == today else "Gisteren" if (today - day).days == 1 else day.strftime("%d/%m")
+                    name = T("Vandaag") if day == today else T("Gisteren") if (today - day).days == 1 else day.strftime("%d/%m")
                     if name != heading:
                         heading = name
                         label(rows, name.upper(), 8, DIM, SIDE, True).pack(anchor="w", pady=(S(10), S(4)))
                     line = tk.Frame(rows, bg=SIDE, padx=S(10), pady=S(8), cursor="hand2")
                     line.pack(fill="x", pady=1)
                     label(line, hhmm(entry["start"]), 10, ACCENT_SOFT, SIDE, True, width=6, anchor="w").pack(side="left", anchor="n")
-                    label(line, elide(entry["title"] or "Programma", 10, S(220)), 10, TEXT, SIDE).pack(side="left", anchor="n")
+                    label(line, elide(entry["title"] or T("Programma"), 10, S(220)), 10, TEXT, SIDE).pack(side="left", anchor="n")
                     ui.bind_hover(line, lambda l=line: ui.set_bg(l, RAISED), lambda l=line: ui.set_bg(l, SIDE))
                     ui.bind_click(line, lambda e=entry: self.play_catchup(item, e))
                     for widget in (line, *line.winfo_children()):
                         widget.bind("<MouseWheel>", lambda e: listing.yview_scroll(-int(e.delta / 120) * 2, "units"))
                 if not past:
-                    label(rows, "Er zijn (nog) geen programma’s om terug te kijken.", 10, MUTED, SIDE,
+                    label(rows, T("Er zijn (nog) geen programma’s om terug te kijken."), 10, MUTED, SIDE,
                           wraplength=S(300), justify="left").pack(anchor="w")
 
             def failed(error):
@@ -5757,12 +5822,12 @@ class Zono:
             self.queue_place()
             top = tk.Frame(panel, bg=SIDE)
             top.pack(fill="x")
-            label(top, "TV-gids", 14, TEXT, SIDE, True).pack(side="left")
+            label(top, T("TV-gids"), 14, TEXT, SIDE, True).pack(side="left")
             Pill(top, "", close_panel, kind="ghost", icon="close", h=32).pack(side="right")
             label(panel, elide(item["title"], 10, S(300)), 10, MUTED, SIDE).pack(anchor="w", pady=(S(2), S(12)))
             rows = tk.Frame(panel, bg=SIDE)
             rows.pack(fill="both", expand=True)
-            label(rows, "Programma’s laden…", 10, MUTED, SIDE).pack(anchor="w")
+            label(rows, T("Programma’s laden…"), 10, MUTED, SIDE).pack(anchor="w")
 
             def fill(entries):
                 if not rows.winfo_exists():
@@ -5777,10 +5842,10 @@ class Zono:
                     line.pack(fill="x", pady=1)
                     label(line, hhmm(entry["start"]) or "--:--", 10, ACCENT_SOFT if active else MUTED,
                           line.cget("bg"), active, width=6, anchor="w").pack(side="left", anchor="n")
-                    label(line, elide(entry["title"] or "Programma", 10, S(230), active), 10,
+                    label(line, elide(entry["title"] or T("Programma"), 10, S(230), active), 10,
                           TEXT if active else SOFT, line.cget("bg"), active).pack(side="left", anchor="n")
                 if not upcoming:
-                    label(rows, "Geen gidsgegevens van deze provider.", 10, MUTED, SIDE).pack(anchor="w")
+                    label(rows, T("Geen gidsgegevens van deze provider."), 10, MUTED, SIDE).pack(anchor="w")
 
             def failed(error):
                 if rows.winfo_exists():
@@ -5844,7 +5909,7 @@ class Zono:
                 label(heading, f"S{season}:A{number_in}", 12, MUTED, black, True).pack(side="left", padx=(S(10), S(8)))
             label(heading, elide(str(item["title"]), 12, S(320)), 12, SOFT, black).pack(side="left", padx=(S(4), 0))
         elif item.get("kind") == "catchup":
-            Pill(heading, "TERUGKIJKEN", None, kind="accent", h=22, px=9.5, radius=5, weight="bold", bg=black).pack(side="left", padx=(0, S(10)))
+            Pill(heading, T("TERUGKIJKEN"), None, kind="accent", h=22, px=9.5, radius=5, weight="bold", bg=black).pack(side="left", padx=(0, S(10)))
             label(heading, elide(item["title"], 12, S(380), True), 12, TEXT, black, True).pack(side="left")
             label(heading, f"   {item.get('channel', '')}  ·  {item.get('when', '')}", 10, MUTED, black).pack(side="left")
         else:
@@ -5910,11 +5975,11 @@ class Zono:
             card.kind = "speed"
             state["card"] = card
             card.configure(padx=S(16), pady=S(14))
-            label(card, "AFSPEELSNELHEID", 8, ACCENT_SOFT, SIDE, True).pack(anchor="w", pady=(0, S(8)))
+            label(card, T("AFSPEELSNELHEID"), 8, ACCENT_SOFT, SIDE, True).pack(anchor="w", pady=(0, S(8)))
             row = tk.Frame(card, bg=SIDE)
             row.pack()
             for rate in (0.5, 0.75, 1.0, 1.25, 1.5):
-                text = ("Normaal" if rate == 1 else f"{rate:g}×".replace(".", ","))
+                text = (T("Normaal") if rate == 1 else f"{rate:g}×".replace(".", ","))
                 Pill(row, text, lambda r=rate: (self.engine.set_rate(r), session.update(rate=r), card.shell.destroy(),
                                                 state.update(card=None)),
                      kind="chip_on" if session.get("rate", 1.0) == rate else "chip", h=34, px=11.5, bg=SIDE).pack(side="left", padx=(0, S(6)))
@@ -5928,7 +5993,7 @@ class Zono:
             state["guide"], state["panel"] = panel, "episodes"
             top = tk.Frame(panel, bg=SIDE)
             top.pack(fill="x")
-            label(top, elide(str(item.get("series", "Afleveringen")), 14, S(280), True), 14, TEXT, SIDE, True).pack(side="left")
+            label(top, elide(str(item.get("series", T("Afleveringen"))), 14, S(280), True), 14, TEXT, SIDE, True).pack(side="left")
             Pill(top, "", close_panel, kind="ghost", icon="close", h=32).pack(side="right")
             scroller = tk.Canvas(panel, bg=SIDE, highlightthickness=0, bd=0, yscrollincrement=S(12))
             scroller.pack(fill="both", expand=True, pady=(S(12), 0))
@@ -5973,7 +6038,7 @@ class Zono:
             card.kind = "record"
             state["card"] = card
             card.configure(padx=S(18), pady=S(16))
-            label(card, "OPNEMEN", 8, "#ff5a6b", SIDE, True).pack(anchor="w")
+            label(card, T("OPNEMEN"), 8, "#ff5a6b", SIDE, True).pack(anchor="w")
             label(card, elide(str(item.get("title", "")), 13, S(320), True), 13, TEXT, SIDE, True).pack(anchor="w", pady=(S(2), S(10)))
             cached = self.guide_cache.get(item.get("sid"))
             program = current_program(cached[1]) if cached else None
@@ -5984,13 +6049,13 @@ class Zono:
                 self.record_now(item, end, title)
             now = time()
             if program and program.get("end", 0) > now + 60:
-                Pill(card, f"Dit programma  ·  tot {hhmm(program['end'])}",
+                Pill(card, T('Dit programma  ·  tot {}').format(hhmm(program['end'])),
                      lambda: go(program["end"] + 120, program.get("title")), kind="primary", icon="record", h=40,
                      padx=16).pack(fill="x", pady=(0, S(6)))
-            for minutes, text in ((30, "30 minuten"), (60, "1 uur"), (120, "2 uur")):
+            for minutes, text in ((30, T("30 minuten")), (60, T("1 uur")), (120, T("2 uur"))):
                 Pill(card, text, lambda m=minutes: go(now + m * 60), kind="ghost", icon="clock", h=38, padx=14).pack(
                     fill="x", pady=(0, S(6)))
-            Pill(card, "Annuleren", lambda: (card.shell.destroy(), state.update(card=None)), kind="quiet", h=36).pack(fill="x")
+            Pill(card, T("Annuleren"), lambda: (card.shell.destroy(), state.update(card=None)), kind="quiet", h=36).pack(fill="x")
 
         def show_card(current):
             """Netflix-style helpers: "Intro overslaan" early in an episode, "Volgende aflevering" near the end."""
@@ -6018,10 +6083,10 @@ class Zono:
                         self.jump(85)
                         show_controls()
                     card.configure(padx=S(4), pady=S(4))
-                    Pill(card, "Intro overslaan", skip_intro, kind="primary", icon="skip_fwd", h=46, padx=22, radius=8).pack()
+                    Pill(card, T("Intro overslaan"), skip_intro, kind="primary", icon="skip_fwd", h=46, padx=22, radius=8).pack()
                 else:
                     following = current["next"]
-                    label(card, "VOLGENDE AFLEVERING", 8, ACCENT_SOFT, SIDE, True).pack(anchor="w")
+                    label(card, T("VOLGENDE AFLEVERING"), 8, ACCENT_SOFT, SIDE, True).pack(anchor="w")
                     label(card, elide(str(following.get("title", "")), 13, S(320), True), 13, TEXT, SIDE, True).pack(
                         anchor="w", pady=(S(2), S(2)))
                     card.counter = label(card, "", 10, MUTED, SIDE)
@@ -6035,16 +6100,16 @@ class Zono:
                         current["count_until"] = None
                         current["upnext_dismissed"] = True
                         current["upnext_show"] = False
-                    Pill(buttons, "Nu afspelen", now, kind="primary", icon="play", h=40, padx=16).pack(side="left")
-                    Pill(buttons, "Annuleren", cancel, kind="ghost", h=40, padx=16).pack(side="left", padx=(S(8), 0))
+                    Pill(buttons, T("Nu afspelen"), now, kind="primary", icon="play", h=40, padx=16).pack(side="left")
+                    Pill(buttons, T("Annuleren"), cancel, kind="ghost", h=40, padx=16).pack(side="left", padx=(S(8), 0))
                 state["card"] = card
             if card is not None and wanted == "next":
                 if current.get("count_until"):
                     left = max(0, int(current["count_until"] - monotonic()) + 1)
-                    card.counter.configure(text=f"Begint over {left} seconde{'n' if left != 1 else ''}")
+                    card.counter.configure(text=(T('Begint over {} seconden') if left != 1 else T('Begint over 1 seconde')).format(left))
                 else:
-                    card.counter.configure(text="Begint automatisch na de aftiteling" if self.preferences.get("autonext", True)
-                                           else "Klik om meteen verder te kijken")
+                    card.counter.configure(text=T("Begint automatisch na de aftiteling") if self.preferences.get("autonext", True)
+                                           else T("Klik om meteen verder te kijken"))
 
         def update(current):
             if not window.winfo_exists() or current is not session:
@@ -6057,7 +6122,7 @@ class Zono:
                 entry = self.active_recording(item["id"])
                 if entry:
                     took = int(time() - entry["start"])
-                    text = f"●  REC  {took // 60}:{took % 60:02d}"
+                    text = T('●  REC  {}:{:02d}').format(took // 60, took % 60)
                     if rec_label.cget("text")[:1] != "●" or not rec_label.winfo_ismapped():
                         rec_label.pack(side="right", padx=S(12))
                     rec_label.configure(text=text)
@@ -6075,15 +6140,15 @@ class Zono:
                 elapsed.configure(text="LIVE" if behind < 5 else "−" + clock(behind))
                 wanted = "live" if behind < 5 else "ghost"
                 if live_button.opts["kind"] != wanted:
-                    live_button.update_pill(kind=wanted, text="LIVE" if behind < 5 else "Naar live")
+                    live_button.update_pill(kind=wanted, text="LIVE" if behind < 5 else T("Naar live"))
             if current.get("count_until"):
-                status.configure(text=f"Volgende aflevering over {max(0, int(current['count_until'] - monotonic()) + 1)} s")
+                status.configure(text=T('Volgende aflevering over {} s').format(max(0, int(current['count_until'] - monotonic()) + 1)))
             elif current.get("failed"):
-                status.configure(text="Deze stream kan niet worden afgespeeld. Probeer een andere titel.")
+                status.configure(text=T("Deze stream kan niet worden afgespeeld. Probeer een andere titel."))
             elif current.get("state") in (1, 2):
-                status.configure(text="Stream openen…")
+                status.configure(text=T("Stream openen…"))
             elif current.get("ended"):
-                status.configure(text="Afspelen beëindigd.")
+                status.configure(text=T("Afspelen beëindigd."))
             else:
                 status.configure(text="")
             if seek is not None and not live and self.engine:
@@ -6202,7 +6267,7 @@ class Zono:
         watch = f"https://www.youtube.com/watch?v={key}"
         if not webview.available():
             webbrowser.open(watch)
-            self.toast("Trailer geopend in je browser", "trailer")
+            self.toast(T("Trailer geopend in je browser"), "trailer")
             return
         paused = False
         if self.engine and self.session and self.session.get("state") == 3 and not self.casting:
@@ -6214,11 +6279,11 @@ class Zono:
         bar = tk.Frame(view, bg="#000000", height=S(64))
         bar.pack(fill="x")
         bar.pack_propagate(False)
-        Pill(bar, "Terug", self.close_trailer, kind="ghost", icon="back", h=40, bg="#000000").pack(side="left", padx=S(20))
-        label(bar, elide(f"Trailer  ·  {item.get('title', '')}", 12, S(700), True), 12, TEXT, "#000000", True).pack(side="left")
+        Pill(bar, T("Terug"), self.close_trailer, kind="ghost", icon="back", h=40, bg="#000000").pack(side="left", padx=S(20))
+        label(bar, elide(T('Trailer  ·  {}').format(item.get('title', '')), 12, S(700), True), 12, TEXT, "#000000", True).pack(side="left")
         frame = tk.Frame(view, bg="#000000")
         frame.pack(fill="both", expand=True)
-        loading = label(frame, "Trailer laden…", 11, MUTED, "#000000")
+        loading = label(frame, T("Trailer laden…"), 11, MUTED, "#000000")
         loading.place(relx=.5, rely=.45, anchor="center")
         page = webview.EmbeddedPage(self.root, frame, data.STATE.parent / "webview")
         self.trailer_view = {"view": view, "page": page, "paused": paused}
@@ -6232,7 +6297,7 @@ class Zono:
             if self.trailer_view and self.trailer_view["page"] is page:
                 self.close_trailer()
                 webbrowser.open(watch)
-                self.toast("Trailer geopend in je browser", "trailer")
+                self.toast(T("Trailer geopend in je browser"), "trailer")
 
         def start():
             if self.trailer_view and self.trailer_view["page"] is page:
@@ -6278,8 +6343,8 @@ class Zono:
         header = tk.Frame(view, bg=BG, padx=S(18), pady=S(12))
         header.pack(fill="x")
         Pill(header, "", self.close_multiview, kind="ghost", icon="back", h=38).pack(side="left")
-        label(header, "Multiview", 14, TEXT, BG, True).pack(side="left", padx=S(12))
-        label(header, "Klik op een beeld voor het geluid  ·  dubbelklik om groot te kijken", 10, MUTED, BG).pack(side="left")
+        label(header, T("Multiview"), 14, TEXT, BG, True).pack(side="left", padx=S(12))
+        label(header, T("Klik op een beeld voor het geluid  ·  dubbelklik om groot te kijken"), 10, MUTED, BG).pack(side="left")
         chips = {}
         grid = tk.Frame(view, bg="#000000")
         grid.pack(fill="both", expand=True, padx=S(6), pady=S(6))
@@ -6291,11 +6356,11 @@ class Zono:
             for value, pill in chips.items():
                 pill.update_pill(kind="chip_on" if value == count else "chip")
             build(count)
-        for value, text in ((4, "4 zenders"), (2, "2 zenders")):
+        for value, text in ((4, T("4 zenders")), (2, T("2 zenders"))):
             chips[value] = Pill(header, text, lambda v=value: set_layout(v), kind="chip", h=34, px=11.5)
             chips[value].pack(side="right", padx=(S(8), 0))
-        note = label(view, "Elke zender gebruikt een eigen verbinding met je provider. Start een beeld niet? Dan staat je "
-                           "abonnement waarschijnlijk minder verbindingen tegelijk toe.", 9, DIM, "#000000")
+        note = label(view, T("Elke zender gebruikt een eigen verbinding met je provider. Start een beeld niet? Dan staat je "
+                           "abonnement waarschijnlijk minder verbindingen tegelijk toe."), 9, DIM, "#000000")
         note.pack(side="bottom", pady=(0, S(8)), before=grid)
 
         def tile_player(tile):
@@ -6324,7 +6389,7 @@ class Zono:
             try:
                 tile_player(tile).open(data.check_url(channel["url"]), self.play_options())
             except (OSError, ValueError, AttributeError, KeyError):
-                tile["name"].configure(text="Deze zender kan niet starten")
+                tile["name"].configure(text=T("Deze zender kan niet starten"))
             apply_audio()
 
         def stop_tile(tile):
@@ -6349,7 +6414,7 @@ class Zono:
             tile["picker"] = box
             top = tk.Frame(box, bg=SIDE)
             top.pack(fill="x")
-            label(top, "Kies een zender", 12, TEXT, SIDE, True).pack(side="left")
+            label(top, T("Kies een zender"), 12, TEXT, SIDE, True).pack(side="left")
             Pill(top, "", lambda: (close_picker(tile), restore(tile)), kind="ghost", icon="close", h=30).pack(side="right")
             query = tk.StringVar()
             entry = tk.Entry(box, textvariable=query, bg=PANEL, fg=TEXT, insertbackground=TEXT, relief="flat",
@@ -6390,18 +6455,18 @@ class Zono:
             frame = tk.Frame(parent, bg="#000000", highlightthickness=S(2), highlightbackground="#1a1a22")
             bar = tk.Frame(frame, bg=BG, padx=S(10), pady=S(6))
             bar.pack(fill="x")
-            name = label(bar, "Leeg", 11, TEXT, BG, True)
+            name = label(bar, T("Leeg"), 11, TEXT, BG, True)
             name.pack(side="left")
             sound = label(bar, "", 10, ACCENT_SOFT, BG)
             sound.pack(side="left", padx=S(8))
             tile = {"frame": frame, "name": name, "sound": sound, "player": None, "channel": None, "picker": None}
             Pill(bar, "", lambda: open_big(tile), kind="quiet", icon="expand", h=28, bg=BG).pack(side="right")
-            Pill(bar, "Wissel", lambda: pick(tile), kind="quiet", icon="swap", h=28, bg=BG, padx=10).pack(side="right")
+            Pill(bar, T("Wissel"), lambda: pick(tile), kind="quiet", icon="swap", h=28, bg=BG, padx=10).pack(side="right")
             body = tk.Frame(frame, bg="#000000")
             body.pack(fill="both", expand=True)
             video = tk.Frame(body, bg="#000000", cursor="hand2")
             empty = tk.Frame(body, bg="#000000")
-            Pill(empty, "Zender kiezen", lambda: pick(tile), kind="ghost", icon="plus", h=44, padx=18).pack()
+            Pill(empty, T("Zender kiezen"), lambda: pick(tile), kind="ghost", icon="plus", h=44, padx=18).pack()
             empty.pack(expand=True)
             tile.update(body=body, video=video, empty=empty)
 
@@ -6483,11 +6548,11 @@ class Zono:
         self.close_trailer()
         self.close_multiview()
         if self.recorders and not messagebox.askyesno(
-                "Zono", "Er loopt een opname. Als je Zono sluit, stopt de opname (wat al is opgenomen blijft bewaard). Toch sluiten?",
+                "Zono", T("Er loopt een opname. Als je Zono sluit, stopt de opname (wat al is opgenomen blijft bewaard). Toch sluiten?"),
                 parent=self.root):
             return
         if self.download_jobs:
-            if not messagebox.askyesno("Zono", "Er lopen nog downloads. Als je Zono sluit, worden ze gestopt. Toch sluiten?",
+            if not messagebox.askyesno("Zono", T("Er lopen nog downloads. Als je Zono sluit, worden ze gestopt. Toch sluiten?"),
                                        parent=self.root):
                 return
             for job in self.download_jobs.values():
@@ -6606,6 +6671,9 @@ def show_existing_window(pids):
     return True
 
 
+RESTART = False
+
+
 def claim_single_instance():
     """Make sure only one Zono runs. An existing window is brought to the front; a copy that is still running
     without a window (left over after closing) is stopped, so Zono simply starts."""
@@ -6636,9 +6704,9 @@ def claim_single_instance():
             if mutex:
                 kernel.CloseHandle(ctypes.c_void_p(mutex))
             kernel.Sleep(200)
-    ctypes.windll.user32.MessageBoxW(None, "Zono draait nog op de achtergrond en kon niet worden gestopt.\n\n"
+    ctypes.windll.user32.MessageBoxW(None, T("Zono draait nog op de achtergrond en kon niet worden gestopt.\n\n"
                                      "Open Taakbeheer (Ctrl+Shift+Esc), beëindig ‘pythonw’ of ‘Zono’ en probeer "
-                                     "opnieuw, of start je pc opnieuw op.", "Zono", 0x40)
+                                     "opnieuw, of start je pc opnieuw op."), "Zono", 0x40)
     return None
 
 
@@ -6659,7 +6727,7 @@ def splash(root):
         name.place(relx=.5, rely=.46, anchor="center")
     except Exception:
         pass
-    note = tk.Label(cover, text="Laden…", bg=BG, fg=MUTED, font=(FONT, 10))
+    note = tk.Label(cover, text=T("Laden…"), bg=BG, fg=MUTED, font=(FONT, 10))
     note.place(relx=.5, rely=.46, y=S(70), anchor="center")
     root.update()
     return cover
@@ -6697,6 +6765,13 @@ def main():
     cover.lift()
     root.after(250, cover.destroy)
     root.mainloop()
+    if RESTART:  # a new language: start a fresh Zono once this one has let go of the single-instance lock
+        try:
+            ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(mutex))
+            subprocess.Popen([sys.executable, "-E", "-s", "-B", str(Path(__file__).resolve())],
+                             cwd=str(Path(__file__).resolve().parent))
+        except OSError:
+            pass
     # Never linger without a window: background work (a stuck download, a stream to the phone) must not keep an
     # invisible Zono alive that blocks the next start.
     os._exit(0)
@@ -6707,5 +6782,4 @@ if __name__ == "__main__":
         main()
     except Exception as error:
         data.log_error(f"{datetime.now():%Y-%m-%d %H:%M:%S}  Zono {VERSION} kon niet starten\n{traceback.format_exc()}")
-        ctypes.windll.user32.MessageBoxW(None, f"Zono kon niet starten ({type(error).__name__}). Details staan in "
-                                         f"{data.LOG}.", "Zono", 0x10)
+        ctypes.windll.user32.MessageBoxW(None, T('Zono kon niet starten ({}). Details staan in {}.').format(type(error).__name__, data.LOG), "Zono", 0x10)

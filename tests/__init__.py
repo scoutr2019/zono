@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
+SRC = Path(os.environ.get("ZONO_SRC") or ROOT / "src")  # ZONO_SRC: test a compiled build instead
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -13,3 +13,5 @@ if str(SRC) not in sys.path:
 TEMP = Path(tempfile.mkdtemp(prefix="zono-tests-"))
 os.environ["LOCALAPPDATA"] = str(TEMP)
 os.environ.setdefault("APPDATA", str(TEMP))
+# Tests read Dutch texts unless a run asks for another language (ZONO_LANGUAGE=fr …).
+os.environ.setdefault("ZONO_LANGUAGE", "nl")

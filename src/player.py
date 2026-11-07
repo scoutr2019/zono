@@ -3,6 +3,7 @@ import ctypes as c
 import os
 import threading
 from pathlib import Path
+from i18n import T
 
 
 class _Track(c.Structure):
@@ -16,7 +17,7 @@ class Player:
     def __init__(self, hwnd):
         folder = Path(__file__).with_name("video")
         if not (folder / "libvlc.dll").is_file():
-            raise ValueError("De ingebouwde videomotor ontbreekt.")
+            raise ValueError(T("De ingebouwde videomotor ontbreekt."))
         self.dll_directory = os.add_dll_directory(str(folder))
         self.instance = self.player = None
         try:
@@ -57,10 +58,10 @@ class Player:
             arguments = (s * 2)(b"--no-video-title-show", b"--no-osd")
             self.instance = self.new(len(arguments), arguments)
             if not self.instance:
-                raise ValueError("VLC kon zijn videomotor niet starten.")
+                raise ValueError(T("VLC kon zijn videomotor niet starten."))
             self.player = self.media_player_new(self.instance)
             if not self.player:
-                raise ValueError("VLC kon de speler niet openen.")
+                raise ValueError(T("VLC kon de speler niet openen."))
             self.media_player_set_hwnd(self.player, hwnd)
             for name in ("libvlc_video_set_mouse_input", "libvlc_video_set_key_input"):
                 try:
@@ -76,7 +77,7 @@ class Player:
     def open(self, url, options=()):
         media = self.media_new_location(self.instance, url.encode())
         if not media:
-            raise ValueError("VLC kon de streamlink niet openen.")
+            raise ValueError(T("VLC kon de streamlink niet openen."))
         add = self.extras.get("media_add_option")
         if add:
             for option in options:
@@ -84,7 +85,7 @@ class Player:
         self.media_player_set_media(self.player, media)
         self.media_release(media)
         if self.media_player_play(self.player) != 0:
-            raise ValueError("VLC kon het afspelen niet starten.")
+            raise ValueError(T("VLC kon het afspelen niet starten."))
 
     def set_window(self, hwnd):
         """Move the video to another window (used for picture-in-picture)."""
@@ -149,7 +150,7 @@ class Headless:
     def __init__(self, url, chain, options=()):
         vlc = Path(__file__).with_name("video")
         if not (vlc / "libvlc.dll").is_file():
-            raise ValueError("De ingebouwde videomotor ontbreekt.")
+            raise ValueError(T("De ingebouwde videomotor ontbreekt."))
         self.dll_directory = os.add_dll_directory(str(vlc))
         self.instance = self.player = None
         p, i, s = c.c_void_p, c.c_int, c.c_char_p
@@ -168,11 +169,11 @@ class Headless:
         arguments = (s * 3)(b"--no-video-title-show", b"--no-osd", b"--no-stats")
         self.instance = self.fn["new"](len(arguments), arguments)
         if not self.instance:
-            raise ValueError("VLC kon niet starten.")
+            raise ValueError(T("VLC kon niet starten."))
         media = self.fn["media_new_location"](self.instance, url.encode("utf-8"))
         if not media:
             self.close()
-            raise ValueError("VLC kon de streamlink niet openen.")
+            raise ValueError(T("VLC kon de streamlink niet openen."))
         for option in (":sout=" + chain, ":sout-keep", ":no-sout-all", ":network-caching=2000", ":http-reconnect",
                        *options):
             self.fn["media_add_option"](media, option.encode("utf-8"))
@@ -181,7 +182,7 @@ class Headless:
         self.fn["media_release"](media)
         if self.fn["media_player_play"](self.player) != 0:
             self.close()
-            raise ValueError("Starten mislukt.")
+            raise ValueError(T("Starten mislukt."))
 
     def state(self):
         return self.fn["media_player_get_state"](self.player) if self.player else 5

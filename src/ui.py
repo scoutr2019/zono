@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps, ImageTk
+from i18n import shown
 
 BG, SIDE, PANEL, RAISED, LINE = "#0b0b0f", "#111116", "#18181f", "#23232b", "#2b2b34"
 TEXT, SOFT, MUTED, DIM = "#f5f5f7", "#d3d3db", "#9b9ba8", "#64646f"
@@ -122,7 +123,7 @@ def elide(text, size, width, bold=False):
 
 
 def label(parent, text, size=11, color=TEXT, bg=BG, bold=False, **kwargs):
-    return tk.Label(parent, text=text, fg=color, bg=bg, font=(FONT, size, "bold" if bold else "normal"), **kwargs)
+    return tk.Label(parent, text=shown(text), fg=color, bg=bg, font=(FONT, size, "bold" if bold else "normal"), **kwargs)
 
 
 # ---------------------------------------------------------------- icons
@@ -377,7 +378,7 @@ class Pill(tk.Label):
         super().__init__(parent, bd=0, highlightthickness=0, bg=bg or parent.cget("bg"),
                          cursor="hand2" if command else "", takefocus=1 if command else 0)
         self.command, self.hover, self.enabled = command, False, True
-        self.opts = dict(text=text, icon=icon, kind=kind, h=h, px=px, width=width, badge=badge,
+        self.opts = dict(text=shown(text), icon=icon, kind=kind, h=h, px=px, width=width, badge=badge,
                          align=align, radius=radius, weight=weight, padx=padx)
         self.redraw()
         if command:

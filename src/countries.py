@@ -6,6 +6,7 @@ countries a viewer chooses first, or to hide the rest.
 """
 import re
 from functools import lru_cache
+from i18n import T
 
 # code: (Dutch name, words that point to it)
 COUNTRIES = {
@@ -121,7 +122,8 @@ def detect(item):
 
 
 def name(code):
-    return COUNTRIES.get(code, (code,))[0]
+    """The country's name in the chosen language."""
+    return T(COUNTRIES.get(code, (code,))[0])
 
 
 _PREFIX = re.compile(r"^\s*(?:[\[\(|]?\s*(?:[A-Z]{2,4}|4K|8K|UHD|FHD|HD|SD|VIP|HEVC|ᴴᴰ|ᵁᴴᴰ)\s*[\]\)|:]\s*|"

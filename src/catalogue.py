@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit, urlunsplit, quote
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener, urlopen
+from i18n import T
 
 APP_DATA = Path(os.environ.get("LOCALAPPDATA", Path.home()))
 ROOT = APP_DATA / "Zono"
@@ -25,7 +26,7 @@ SOURCE_LIMIT = 256 * 1024 * 1024
 def check_url(url):
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
-        raise ValueError("Gebruik een geldige HTTP- of HTTPS-link.")
+        raise ValueError(T("Gebruik een geldige HTTP- of HTTPS-link."))
     return url
 
 def fetch(url, step="M3U-afspeellijst"):
@@ -41,9 +42,9 @@ def fetch(url, step="M3U-afspeellijst"):
             continue
     else:
         scheme = urlsplit(url).scheme.upper()
-        raise ValueError(f"{step}: de verbinding via {scheme} werd twee keer gesloten zonder antwoord. Controleer het protocol en de poort met je IPTV-provider.")
+        raise ValueError(T('{}: de verbinding via {} werd twee keer gesloten zonder antwoord. Controleer het protocol en de poort met je IPTV-provider.').format(step, scheme))
     if len(data) > SOURCE_LIMIT:
-        raise ValueError(f"{step}: het antwoord van de provider is groter dan 256 MiB.")
+        raise ValueError(T('{}: het antwoord van de provider is groter dan 256 MiB.').format(step))
     return data.decode("utf-8-sig", errors="replace")
 
 def parse_m3u(raw):
@@ -130,7 +131,7 @@ def catalog(source):
         groups = {str(c["category_id"]): c["category_name"] for c in (categories if isinstance(categories, list) else []) if isinstance(c, dict) and "category_id" in c and "category_name" in c}
         rows = xtream(source, "get_" + action)
         if not isinstance(rows, list):
-            raise ValueError("Xtream gaf geen geldige catalogus terug. Controleer je gegevens.")
+            raise ValueError(T("Xtream gaf geen geldige catalogus terug. Controleer je gegevens."))
         for row in rows:
             if not isinstance(row, dict) or key not in row:
                 continue
@@ -324,7 +325,7 @@ def restore_source(stored):
         return stored
     secret = _dpapi(b64decode(stored["password_dpapi"]), False)
     if secret is None:
-        raise ValueError("Je opgeslagen wachtwoord kon niet worden ontsleuteld.")
+        raise ValueError(T("Je opgeslagen wachtwoord kon niet worden ontsleuteld."))
     source = {k: v for k, v in stored.items() if k != "password_dpapi"}
     source["password"] = secret.decode("utf-8")
     return source
@@ -411,6 +412,12 @@ def delete_profile(profile):
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def log_note(text):
+    """A notice (not a crash) in the log, so a support question can be answered from it."""
+    from datetime import datetime
+    log_error(f"{datetime.now():%Y-%m-%d %H:%M:%S}  Melding: {text}")
+
+
 def log_error(text):
     try:
         LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -431,7 +438,7 @@ def load():
     try:
         source = restore_source(stored)
     except ValueError:
-        NOTICE = "Je opgeslagen providergegevens konden op deze computer niet worden gelezen. Koppel je provider opnieuw."
+        NOTICE = T("Je opgeslagen providergegevens konden op deze computer niet worden gelezen. Koppel je provider opnieuw.")
         return {}
     state["source"] = source
     for key in ("library", "favorites", "progress"):
@@ -473,7 +480,7 @@ def download(url, path, progress=None, cancel=None):
         with urlopen(request, timeout=30) as response, temp.open("wb") as output:
             kind = response.headers.get_content_type()
             if kind.startswith("text/") or "mpegurl" in kind or kind == "application/json":
-                raise ValueError("De provider stuurde geen videobestand.")
+                raise ValueError(T("De provider stuurde geen videobestand."))
             expected = response.headers.get("Content-Length")
             total = int(expected) if expected and expected.isdecimal() else 0
             done = 0
@@ -488,7 +495,7 @@ def download(url, path, progress=None, cancel=None):
                 if progress:
                     progress(done, total)
             if not done or (total and done != total):
-                raise ValueError("De download is onvolledig.")
+                raise ValueError(T("De download is onvolledig."))
         temp.replace(path)
     finally:
         temp.unlink(missing_ok=True)

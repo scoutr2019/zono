@@ -20,6 +20,7 @@ Zono is een IPTV-speler voor Windows 10 en 11 in de stijl van een streamingdiens
 - **Casten** naar tv's in huis (DLNA, o.a. LG).
 - **Profielen** met eigen favorieten, voortgang en (optioneel) een pincode; kindprofielen.
 - **Opgeruimde namen**: `[ALL] NL: Film (2024)` wordt `Film`, `4K | VRT 1 HD` wordt `VRT 1`, scheidingsregels van providers verdwijnen.
+- **Vier talen**: Nederlands, Français, English en Deutsch. Zono volgt de taal van Windows en je kiest een andere bij Instellingen › Algemeen › Taal.
 - Wachtwoorden van je provider worden met Windows (DPAPI) versleuteld bewaard.
 
 <p align="center">
@@ -49,6 +50,8 @@ python -m pyflakes src tests tools              # code-controle
 python tools/perf.py                            # snelheid met 56 000 titels
 ```
 
+`ZONO_LANGUAGE=fr python -m unittest tests.test_ui_smoke` draait de app-test in een andere taal.
+
 Op Linux draaien de UI-tests onder een virtueel scherm: `xvfb-run -a python -m unittest discover -s tests -t .`. Zonder scherm worden ze overgeslagen.
 
 | Test | Wat wordt gecontroleerd |
@@ -58,6 +61,8 @@ Op Linux draaien de UI-tests onder een virtueel scherm: `xvfb-run -a python -m u
 | `test_qr` | QR-code voor de telefoonkoppeling (en ontcijferen, als `pyzbar` er is) |
 | `test_remote` | Telefoonserver: toegangscode, bibliotheek, doorsturen van streams en playlists, foutuitleg |
 | `test_live_buffer` | Pauzeren/terugspoelen bij live tv: samengevoegde playlist, venster, opruimen, opnemen |
+| `test_i18n` | Elke tekst heeft een Franse, Engelse en Duitse vertaling met dezelfde `{}`-plekken |
+| `test_images` | Posters laden ook van kieskeurige beeldservers |
 | `test_ui_smoke` | Start de echte app (met een nep-videospeler en nep-provider), bezoekt elke pagina, speelt een aflevering en een zender af, opent instellingen; faalt bij elke fout in het logboek of bij oplopende timers |
 
 De GitHub Actions-workflow (`.github/workflows/tests.yml`) draait dit bij elke push op Windows en Linux.
@@ -68,13 +73,27 @@ De GitHub Actions-workflow (`.github/workflows/tests.yml`) draait dit bij elke p
 
 ```bash
 pip install pefile pillow
-# 1. zet VERSION in src/app.py op de nieuwe versie (even lang als de oude, bv. 2.1.2 -> 2.1.3)
-# 2. bouw vanuit de vorige release:
-python tools/build_exe.py --base Zono-2_1_2.exe --old-version 2.1.2 --version 2.1.3
+# 1. zet VERSION in src/app.py op de nieuwe versie (even lang als de oude, bv. 2.2.0 -> 2.2.1)
+# 2. bouw vanuit de vorige release, met Python 3.14 (dezelfde versie als in de exe):
+python tools/build_exe.py --base Zono-2_2_0.exe --old-version 2.2.0 --version 2.2.1 --python <pad-naar-python3.14>
 ```
+
+De app gaat als gecompileerde Python (`.pyc`) in de exe, niet als leesbare broncode.
 
 Het resultaat staat in `dist/`. Zie [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) voor hoe de app in elkaar zit.
 
+## Vertalen
+
+Alle teksten staan in het Nederlands in de code, in `T("…")`. De vertalingen staan in `src/locale/fr.json`, `en.json` en `de.json`. Na een nieuwe tekst toont `python tools/strings.py` wat er nog vertaald moet worden.
+
 ## Licentie
 
-Nog te kiezen door de eigenaar. Tot er een `LICENSE`-bestand is, blijven alle rechten voorbehouden.
+Zono valt onder de **[PolyForm Strict License 1.0.0](LICENSE.md)**. Dat betekent in gewone woorden:
+
+- Je mag de code **lezen** en Zono **voor jezelf, niet-commercieel** gebruiken.
+- Je mag de code **niet aanpassen**, er **geen eigen app op baseren**, ze **niet verspreiden** en **niet commercieel gebruiken**.
+- Wil je iets anders? Vraag toestemming aan de eigenaar.
+
+Het officiële Engelse licentiebestand gaat altijd voor.
+
+Zono gebruikt software van anderen, met hun eigen licenties: Python (PSF-licentie), Pillow (MIT-CMU-licentie) en de VLC-videomotor libVLC (LGPL 2.1). Hun licentieteksten zitten in de release (`runtime/LICENSE.txt`, `video/COPYING.txt`).

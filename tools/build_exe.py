@@ -5,21 +5,37 @@ Zono's own files. This script swaps that zip for the files in `src/`, sets the v
 writes the app icons from `src/zono_mark.png`. It runs on any OS:
 
     pip install pefile pillow
-    python tools/build_exe.py --base Zono-2_1_1.exe --old-version 2.1.1 --version 2.1.2 --icons
+    python tools/build_exe.py --base Zono-2_1_1.exe --old-version 2.1.1 --version 2.1.2 --python <python3.14>
 
 The base exe is any earlier release (see the GitHub Releases page); it is not stored in this repository.
+
+The app ships as compiled Python (.pyc) instead of readable source: `--python` must point at the same Python
+version as the one inside the exe (3.14), because .pyc files only load in the version that made them.
+`--readable` ships the plain .py files instead (for debugging).
 """
 import argparse
 import io
 import struct
+import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-FILES = ["app.py", "ui.py", "catalogue.py", "player.py", "qr.py", "remote.py", "cast.py", "tmdb.py", "webview.py",
-         "countries.py", "Zono.ico", "zono_logo.png", "zono_mark.png"]
+MODULES = ["app.py", "ui.py", "catalogue.py", "player.py", "qr.py", "remote.py", "cast.py", "tmdb.py", "webview.py",
+           "countries.py", "i18n.py"]
+ASSETS = ["Zono.ico", "zono_logo.png", "zono_mark.png", "locale/en.json", "locale/fr.json", "locale/de.json"]
+RUNTIME_PYTHON = "3.14"
+STUB = ('# Zono. The app itself is in zono_main.pyc; the source code is at github (see the README).\n'
+        'import runpy\nrunpy.run_module("zono_main", run_name="__main__")\n')
+COMPILE = """
+import py_compile, sys
+for source, target in zip(sys.argv[1::2], sys.argv[2::2]):
+    name = "zono/" + source.replace(chr(92), "/").rsplit("/", 1)[-1]  # no build-machine paths in error reports
+    py_compile.compile(source, cfile=target, dfile=name, doraise=True, optimize=2)
+"""
 ZIP_SIZE_AT = 1360  # the launcher stores the size of its zip here, the zip itself follows
 
 
@@ -38,7 +54,29 @@ def replace_once(buffer, old, new):
     buffer[index:index + len(old_bytes)] = new_bytes
 
 
-def swap_files(base):
+def app_files(python, readable):
+    """{name in the exe: bytes} for Zono's own files."""
+    files = {name: (SRC / name).read_bytes() for name in ASSETS}
+    if readable:
+        files.update({name: (SRC / name).read_bytes() for name in MODULES})
+        return files
+    version = subprocess.run([python, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"], capture_output=True,
+                             text=True, check=True).stdout.strip()
+    if version != RUNTIME_PYTHON:
+        sys.exit(f"--python is Python {version}; de exe gebruikt Python {RUNTIME_PYTHON}.")
+    with tempfile.TemporaryDirectory() as folder:
+        pairs = []
+        for name in MODULES:
+            target = "zono_main.pyc" if name == "app.py" else name[:-3] + ".pyc"
+            pairs += [str(SRC / name), str(Path(folder) / target)]
+        subprocess.run([python, "-c", COMPILE, *pairs], check=True)
+        for target in pairs[1::2]:
+            files[Path(target).name] = Path(target).read_bytes()
+    files["app.py"] = STUB.encode("utf-8")  # the launcher runs app.py
+    return files
+
+
+def swap_files(base, files):
     size = struct.unpack("<I", base[ZIP_SIZE_AT:ZIP_SIZE_AT + 4])[0]
     old = zipfile.ZipFile(io.BytesIO(bytes(base[ZIP_SIZE_AT + 4:ZIP_SIZE_AT + 4 + size])))
     # The zip is a resource of the .NET launcher. Earlier builds may have left it smaller than its slot: the
@@ -49,10 +87,12 @@ def swap_files(base):
     room = max(size, end - (ZIP_SIZE_AT + 4) - 4)
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as new:
-        for name in FILES:
-            new.write(SRC / name, name)
+        for name, content in files.items():
+            new.writestr(name, content)
+        ours = {info.filename for info in old.infolist()
+                if "/" not in info.filename or info.filename.startswith("locale/")}  # Zono's files of the old build
         for info in old.infolist():  # Python, Pillow, VLC: unchanged
-            if info.filename not in FILES:
+            if info.filename not in files and info.filename not in ours:
                 new.writestr(info, old.read(info.filename))
     packed = output.getvalue()
     if len(packed) > room:
@@ -114,6 +154,8 @@ def main():
     parser.add_argument("--old-version", required=True, help="version of the base exe, e.g. 2.1.1")
     parser.add_argument("--version", required=True, help="new version, e.g. 2.1.2 (same length as the old one)")
     parser.add_argument("--icons", action="store_true", help="also write the icons from src/zono_mark.png")
+    parser.add_argument("--python", help=f"Python {RUNTIME_PYTHON} used to compile the app (default: this Python)")
+    parser.add_argument("--readable", action="store_true", help="ship readable .py files instead of compiled ones")
     parser.add_argument("--out", help="output file (default: dist/Zono-<version>.exe)")
     args = parser.parse_args()
 
@@ -122,7 +164,7 @@ def main():
     if source_version != args.version:
         sys.exit(f"src/app.py heeft VERSION = \"{source_version}\", niet {args.version}. Pas dat eerst aan.")
     data = bytearray(Path(args.base).read_bytes())
-    swap_files(data)
+    swap_files(data, app_files(args.python or sys.executable, args.readable))
     replace_once(data, args.old_version, args.version)
     replace_once(data, package_name(args.old_version), package_name(args.version))
     if args.icons:

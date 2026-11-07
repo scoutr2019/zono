@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, quote, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 import catalogue as data
+from i18n import T
 
 
 def lan_address():
@@ -324,7 +325,7 @@ class RemoteServer:
             except OSError:
                 continue
         if not self.server:
-            raise OSError("Geen vrije poort gevonden.")
+            raise OSError(T("Geen vrije poort gevonden."))
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 

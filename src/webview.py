@@ -13,6 +13,7 @@ from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
+from i18n import T
 
 GWL_STYLE, GWL_EXSTYLE = -16, -20
 WS_CHILD, WS_VISIBLE, WS_POPUP = 0x40000000, 0x10000000, 0x80000000
@@ -111,7 +112,7 @@ class EmbeddedPage:
         browser = find_browser()
         if not browser:
             if on_fail:
-                on_fail("Geen Edge gevonden")
+                on_fail(T("Geen Edge gevonden"))
             return
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         width = max(320, self.container.winfo_width())
@@ -166,7 +167,7 @@ class EmbeddedPage:
             if waited["ms"] > timeout * 1000:
                 self.close()
                 if on_fail:
-                    on_fail("Edge startte niet")
+                    on_fail(T("Edge startte niet"))
                 return
             waited["ms"] += 120
             self.root.after(120, poll)
