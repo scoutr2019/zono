@@ -1,6 +1,6 @@
 <p align="center"><img src="src/zono_logo.png" alt="zono" height="56"></p>
 
-<p align="center"><b>English</b> · <a href="README.nl.md">Nederlands</a></p>
+<p align="center"><b>English</b> · <a href="README.nl.md">Nederlands</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a></p>
 
 <p align="center"><b>Movies, series and live TV from your own IPTV provider, brought together in one Windows app.</b></p>
 
