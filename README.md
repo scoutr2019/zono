@@ -1,99 +1,101 @@
 <p align="center"><img src="src/zono_logo.png" alt="zono" height="56"></p>
 
-<p align="center"><b>Films, series en live tv van je eigen IPTV-provider, mooi gebundeld in één Windows-app.</b></p>
+<p align="center"><b>English</b> · <a href="README.nl.md">Nederlands</a></p>
 
-<p align="center"><img src="docs/screenshots/zono-windows-01.jpg" alt="Zono op Windows" width="860"></p>
+<p align="center"><b>Movies, series and live TV from your own IPTV provider, brought together in one Windows app.</b></p>
 
-Zono is een IPTV-speler voor Windows 10 en 11 in de stijl van een streamingdienst. Je koppelt je eigen provider (Xtream Codes of een M3U-link) en Zono maakt er een overzichtelijke bibliotheek van, met een ingebouwde videospeler (VLC 3).
+<p align="center"><img src="docs/screenshots/zono-windows-01.jpg" alt="Zono on Windows" width="860"></p>
 
-> Zono levert zelf geen zenders, films of series. Je hebt een eigen abonnement bij een provider nodig en bent zelf verantwoordelijk voor wat je ermee bekijkt.
+Zono is an IPTV player for Windows 10 and 11 with a streaming-service-style interface. Connect your own provider using Xtream Codes or an M3U URL, and Zono turns your content into an organised library with a built-in video player powered by VLC 3.
 
-## Wat het kan
+> Zono does not provide channels, movies, series or IPTV subscriptions. You need your own provider and are responsible for ensuring you have the right to access the content you watch.
 
-- **Ontdekken**: een startpagina die je zelf samenstelt (rijen aan/uit, volgorde, grote banner), met verder kijken, favorieten, top 10, nieuw toegevoegd en rijen per land.
-- **Live TV en TV-gids**: zenderlijst met nu/straks, een volledige gids, terugkijken (catch-up) waar je provider dat aanbiedt, en een doorzichtige gids tijdens het kijken.
-- **Films en series**: detailpagina's met trailer (in de app), seizoenen en afleveringen, vinkjes voor wat je gezien hebt.
-- **Speler zoals Netflix**: volgende aflevering met aftelling, intro overslaan, ondertitels (ook eigen .srt), audiosporen, snelheid, picture-in-picture, volledig scherm.
-- **Opnemen** van live tv (rode R-knop) en **downloads** voor offline kijken.
-- **Multiview**: meerdere zenders tegelijk.
-- **Op je telefoon**: scan een QR-code en kijk op je iPhone of Android (via de pc, ook met AirPlay); de pc zet beelden die de telefoon niet aankan om naar H.264.
-- **Casten** naar tv's in huis (DLNA, o.a. LG).
-- **Profielen** met eigen favorieten, voortgang en (optioneel) een pincode; kindprofielen.
-- **Opgeruimde namen**: `[ALL] NL: Film (2024)` wordt `Film`, `4K | VRT 1 HD` wordt `VRT 1`, scheidingsregels van providers verdwijnen.
-- **Vier talen**: Nederlands, Français, English en Deutsch. Zono volgt de taal van Windows en je kiest een andere bij Instellingen › Algemeen › Taal.
-- Wachtwoorden van je provider worden met Windows (DPAPI) versleuteld bewaard.
+## Features
+
+- **Discover**: customise your home screen with optional rows, your preferred order, a large banner, Continue Watching, favourites, top 10, recently added content and rows by country.
+- **Live TV and programme guide**: now/next information, a full TV guide, catch-up where supported by your provider, and a transparent guide while watching.
+- **Movies and series**: detail pages with in-app trailers, seasons and episodes, and watched indicators.
+- **Player controls**: next-episode countdown, skip intro, subtitles including your own `.srt` files, audio tracks, playback speed, picture-in-picture and full screen.
+- **Recording** of live TV using the red R button, and **downloads** for offline viewing.
+- **Multiview**: watch multiple channels at once.
+- **Watch on your phone**: scan a QR code to watch on iPhone or Android through your PC, including AirPlay support. The PC converts video your phone cannot play to H.264.
+- **Cast** to TVs on your home network using DLNA, including supported LG TVs.
+- **Profiles** with separate favourites, progress, optional PINs and child profiles.
+- **Clean titles**: `[ALL] NL: Film (2024)` becomes `Film`, `4K | VRT 1 HD` becomes `VRT 1`, and provider separator entries are removed.
+- **Four languages**: Dutch, French, English and German. Zono follows your Windows language; you can change it under Settings › General › Language.
+- Provider passwords are stored encrypted using Windows DPAPI.
 
 <p align="center">
 <img src="docs/screenshots/zono-windows-02.jpg" width="420"> <img src="docs/screenshots/zono-windows-03.jpg" width="420">
 </p>
 
-## Installeren
+## Installation
 
-Download `Zono-x_y_z.zip` bij [Releases](../../releases), pak uit en start `Zono.exe`. Alles zit erin (Python, de VLC-videomotor); er hoeft niets anders geïnstalleerd te worden. Je gegevens staan in `%LOCALAPPDATA%\Zono`.
+Approved downloads will appear under [Releases](../../releases). The supplied 2.2.1 build has not been released yet: the bundled VLC modules and their licence terms must be reviewed first. Your data is stored in `%LOCALAPPDATA%\Zono`.
 
-## Vanaf de broncode starten
+## Running from source
 
-Voor ontwikkelaars, op Windows 10/11 (64-bit):
+For developers on Windows 10/11 (64-bit):
 
-1. Installeer **Python 3.12 (64-bit)** en daarna `pip install -r requirements.txt`.
-2. Zet de VLC-videomotor naast de code: kopieer uit een geïnstalleerde **VLC 3.0.x (64-bit)** `libvlc.dll`, `libvlccore.dll` en de map `plugins` naar `src/video/`.
-3. Start: `python src/app.py`.
+1. Install **Python 3.12 (64-bit)**, then run `pip install -r requirements.txt`.
+2. Place the VLC video engine alongside the code: copy `libvlc.dll`, `libvlccore.dll` and the `plugins` directory from an installed **VLC 3.0.x (64-bit)** into `src/video/`.
+3. Run `python src/app.py`.
 
-De map `src/video/` staat in `.gitignore`: VLC zit niet in deze repository.
+The `src/video/` directory is excluded by `.gitignore`; VLC is not included in this repository.
 
-## Testen
+## Testing
 
 ```bash
 pip install -r requirements-dev.txt
-python -m unittest discover -s tests -t .       # alle tests
-python -m pyflakes src tests tools              # code-controle
-python tools/perf.py                            # snelheid met 56 000 titels
+python -m unittest discover -s tests -t .       # test suite
+python -m pyflakes src tests tools              # static checks
+python tools/perf.py                            # performance with 56,000 titles
 ```
 
-`ZONO_LANGUAGE=fr python -m unittest tests.test_ui_smoke` draait de app-test in een andere taal.
+`ZONO_LANGUAGE=fr python -m unittest tests.test_ui_smoke` runs the app test in another language using POSIX shell syntax.
 
-Op Linux draaien de UI-tests onder een virtueel scherm: `xvfb-run -a python -m unittest discover -s tests -t .`. Zonder scherm worden ze overgeslagen.
+On Linux, run UI tests with a virtual display: `xvfb-run -a python -m unittest discover -s tests -t .`. Without a display, UI tests are skipped.
 
-| Test | Wat wordt gecontroleerd |
+| Test | Coverage |
 |---|---|
-| `test_countries` | Namen opschonen, landen herkennen, afleveringstitels, scheidingsregels |
-| `test_catalogue` | M3U lezen, alleen http(s)-links, Xtream-links, verbergen van inloggegevens, pincodes |
-| `test_qr` | QR-code voor de telefoonkoppeling (en ontcijferen, als `pyzbar` er is) |
-| `test_remote` | Telefoonserver: toegangscode, bibliotheek, doorsturen van streams en playlists, foutuitleg |
-| `test_live_buffer` | Pauzeren/terugspoelen bij live tv: samengevoegde playlist, venster, opruimen, opnemen |
-| `test_i18n` | Elke tekst heeft een Franse, Engelse en Duitse vertaling met dezelfde `{}`-plekken |
-| `test_images` | Posters laden ook van kieskeurige beeldservers |
-| `test_ui_smoke` | Start de echte app (met een nep-videospeler en nep-provider), bezoekt elke pagina, speelt een aflevering en een zender af, opent instellingen; faalt bij elke fout in het logboek of bij oplopende timers |
+| `test_countries` | Title cleanup, country detection, episode titles and separator entries |
+| `test_catalogue` | M3U parsing, HTTP(S)-only URLs, Xtream links, hiding credentials and PINs |
+| `test_qr` | Phone-pairing QR codes and decoding when `pyzbar` is available |
+| `test_remote` | Phone server: access codes, library, stream and playlist proxying, and error messages |
+| `test_live_buffer` | Pausing and rewinding live TV: combined playlist, time window, cleanup and recording |
+| `test_i18n` | French, English and German translations with matching `{}` placeholders |
+| `test_images` | Loading posters from restrictive image servers |
+| `test_ui_smoke` | Launches the real app with a fake player and provider, visits every page, plays an episode and a channel, and opens settings; fails on logged errors or accumulating timers |
 
-De GitHub Actions-workflow (`.github/workflows/tests.yml`) draait dit bij elke push op Windows en Linux.
+The GitHub Actions workflow (`.github/workflows/tests.yml`) runs the checks on Windows and Linux for every push.
 
-## Een release bouwen
+## Building a release
 
-`Zono.exe` is een kleine launcher met een ingebouwde Python, Pillow en VLC, plus een zip met de bestanden uit `src/`. Een nieuwe versie maak je door die zip in een eerdere release te vervangen:
+`Zono.exe` is a small launcher with embedded Python, Pillow and VLC, plus a ZIP containing the files from `src/`. A new build replaces that ZIP in an earlier release:
 
 ```bash
 pip install pefile pillow
-# 1. zet VERSION in src/app.py op de nieuwe versie (even lang als de oude, bv. 2.2.0 -> 2.2.1)
-# 2. bouw vanuit de vorige release, met Python 3.14 (dezelfde versie als in de exe):
-python tools/build_exe.py --base Zono-2_2_0.exe --old-version 2.2.0 --version 2.2.1 --python <pad-naar-python3.14>
+# 1. Set VERSION in src/app.py to the new version, keeping the same string length (e.g. 2.2.0 -> 2.2.1).
+# 2. Build from a previous release using Python 3.14, matching the embedded runtime:
+python tools/build_exe.py --base Zono-2_2_0.exe --old-version 2.2.0 --version 2.2.1 --python <path-to-python3.14>
 ```
 
-De app gaat als gecompileerde Python (`.pyc`) in de exe, niet als leesbare broncode.
+The app is packaged as compiled Python (`.pyc`) inside the executable rather than plain source files.
 
-Het resultaat staat in `dist/`. Zie [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) voor hoe de app in elkaar zit.
+Build output is written to `dist/`. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the app's architecture. Building successfully does not resolve the third-party licensing requirements described below.
 
-## Vertalen
+## Translation
 
-Alle teksten staan in het Nederlands in de code, in `T("…")`. De vertalingen staan in `src/locale/fr.json`, `en.json` en `de.json`. Na een nieuwe tekst toont `python tools/strings.py` wat er nog vertaald moet worden.
+Source strings are written in Dutch and wrapped in `T("…")`. Translations are stored in `src/locale/fr.json`, `en.json` and `de.json`. After adding a string, run `python tools/strings.py` to list missing translations.
 
-## Licentie
+## Licence
 
-Zono valt onder de **[PolyForm Strict License 1.0.0](LICENSE.md)**. Dat betekent in gewone woorden:
+Zono's own code is licensed under the **[PolyForm Strict License 1.0.0](LICENSE.md)**. Zono is **source available**, not open source under the OSI definition. In plain language:
 
-- Je mag de code **lezen** en Zono **voor jezelf, niet-commercieel** gebruiken.
-- Je mag de code **niet aanpassen**, er **geen eigen app op baseren**, ze **niet verspreiden** en **niet commercieel gebruiken**.
-- Wil je iets anders? Vraag toestemming aan de eigenaar.
+- You may **read** the code and use Zono for purposes allowed by the licence, including noncommercial use. The licence also contains specific provisions for noncommercial organisations.
+- The licence does not grant permission to modify Zono's own code, create derivative works or distribute copies. Commercial use or sale requires separate permission unless expressly permitted by the licence or applicable law.
+- For other uses, request permission from the owner.
 
-Het officiële Engelse licentiebestand gaat altijd voor.
+The official English licence text takes precedence over this summary.
 
-Zono gebruikt software van anderen, met hun eigen licenties: Python (PSF-licentie), Pillow (MIT-CMU-licentie) en de VLC-videomotor libVLC (LGPL 2.1). Hun licentieteksten zitten in de release (`runtime/LICENSE.txt`, `video/COPYING.txt`).
+Third-party software retains its own licences; PolyForm Strict does not restrict those rights. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [NOTICE.md](NOTICE.md). Including a licence text in an executable does not, by itself, establish compliance with all distribution requirements.
