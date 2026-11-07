@@ -31,7 +31,7 @@ def texts():
 def main():
     source = texts()
     if "--dump" in sys.argv:
-        print(json.dumps(source, ensure_ascii=False, indent=0))
+        print(json.dumps(source, ensure_ascii=True, indent=0))
         return
     bad = 0
     for path in sorted((SRC / "locale").glob("*.json")):

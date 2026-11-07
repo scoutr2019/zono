@@ -36,6 +36,7 @@ class PickyServer(BaseHTTPRequestHandler):
 class Images(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.saved_proxies = {key: os.environ.get(key) for key in ("NO_PROXY", "no_proxy")}
         os.environ["NO_PROXY"] = os.environ["no_proxy"] = "127.0.0.1,localhost"
         urllib.request._opener = None
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), PickyServer)
@@ -46,6 +47,12 @@ class Images(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
+        for key, value in cls.saved_proxies.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        urllib.request._opener = None
 
     def test_loads_from_picky_server(self):
         image = app.download_image(self.base + "/poster.png")
@@ -98,6 +105,8 @@ class SparePictures(unittest.TestCase):
         zono.art_lock = threading.BoundedSemaphore(3)
         zono.source = {"server": "http://x", "user": "u", "password": "p"}
         zono.preferences = {}
+        # This unit-test object must not persist fake server URLs into later UI tests.
+        zono.save_art_fix = lambda *args, **kwargs: None
         return zono
 
     def test_dead_server_falls_back_to_detail_pictures(self):
