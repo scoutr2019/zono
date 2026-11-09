@@ -1,5 +1,8 @@
 # Wijzigingen
 
+## 2.2.2
+- Fout opgelost: Escape in volledig scherm, nadat de bedieningsbalk vanzelf verdwenen was, gaf "window isn't packed". Met een test die precies dat nadoet.
+
 ## 2.2.1
 - Posters als de beeldserver van de provider niet bestaat of geblokkeerd is: Zono gebruikt de foto's uit de filminfo van de provider (vaak TMDB) of, met een TMDB-sleutel, TMDB zelf, en onthoudt per titel wat werkte (art.json).
 - Servernamen die de DNS van je internetprovider blokkeert, worden opgezocht via beveiligde DNS (Cloudflare/Google).

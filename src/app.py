@@ -39,7 +39,7 @@ import i18n
 import netfix
 from i18n import T
 
-VERSION = "2.2.1"
+VERSION = "2.2.2"
 TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
         "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False
@@ -5576,8 +5576,10 @@ class Zono:
                 header.pack_forget()
                 schedule_hide()
             else:
-                header.pack(side="top", fill="x", before=controls)
+                # in full screen the controls may be hidden (unpacked): put them back first, then the header above them
                 show_controls()
+                anchor = controls if controls.winfo_manager() == "pack" else video
+                header.pack(side="top", fill="x", before=anchor)
             self.queue_place()
 
         def show_controls(_=None):

@@ -128,6 +128,20 @@ class Smoke(unittest.TestCase):
         self.pump(0.5)
         self.assert_clean("player")
 
+    def test_4b_escape_from_full_screen_after_controls_hid(self):
+        """Bug from a user (2.2.1): Esc in full screen, after the controls had hidden themselves, crashed with
+        'window isn't packed'."""
+        z = self.zono
+        _, episodes = fakes.details(None, {"id": "s0", "kind": "series"})
+        z.play(episodes[0], episodes)
+        z.expand_player(fullscreen=True)
+        self.pump(3.2)  # the controls hide after 2.6 s in full screen
+        z.player_keys(type("Event", (), {"keysym": "Escape", "char": "", "widget": self.root, "state": 0})())
+        self.pump(0.5)
+        z.stop_playback()
+        self.pump(0.3)
+        self.assert_clean("escape from full screen")
+
     def test_5_live_channel(self):
         z = self.zono
         z.select("live")
