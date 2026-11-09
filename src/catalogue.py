@@ -57,6 +57,10 @@ def parse_m3u(raw):
             title = re.split(r',(?=(?:[^"]*"[^"]*")*[^"]*$)', line, maxsplit=1)
             info = {"title": title[-1].strip(), "image": attrs.get("tvg-logo", ""),
                     "group": attrs.get("group-title") or "Overige"}
+            if attrs.get("tvg-id"):
+                info["epg"] = attrs["tvg-id"]  # the channel's id in the XMLTV guide
+            if attrs.get("tvg-name"):
+                info["tvg_name"] = attrs["tvg-name"]
         elif info is not None and line and not line.startswith("#"):
             if urlsplit(line).scheme in ("http", "https"):
                 kind = "movie" if "/movie/" in urlsplit(line).path or urlsplit(line).path.lower().endswith((".mp4", ".mkv", ".avi")) else "live"
@@ -145,6 +149,8 @@ def catalog(source):
             if kind == "live":
                 entry["archive"] = 1 if str(row.get("tv_archive") or "0") not in ("0", "", "None") else 0
                 entry["archive_days"] = int(_number(row.get("tv_archive_duration")))
+                if row.get("epg_channel_id"):
+                    entry["epg"] = str(row["epg_channel_id"])  # id in the provider's XMLTV guide (for searching)
             if kind != "live":
                 rating = _number(row.get("rating")) or _number(row.get("rating_5based")) * 2
                 entry["rating"] = round(min(rating, 10.0), 1)

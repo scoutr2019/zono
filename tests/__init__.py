@@ -15,3 +15,11 @@ os.environ["LOCALAPPDATA"] = str(TEMP)
 os.environ.setdefault("APPDATA", str(TEMP))
 # Tests read Dutch texts unless a run asks for another language (ZONO_LANGUAGE=fr …).
 os.environ.setdefault("ZONO_LANGUAGE", "nl")
+
+
+def fresh_ui():
+    """Each UI test makes its own Tk window: pictures cached for an earlier window cannot be reused."""
+    import ui
+    for value in vars(ui).values():
+        if callable(getattr(value, "cache_clear", None)):
+            value.cache_clear()

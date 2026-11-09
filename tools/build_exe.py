@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 MODULES = ["app.py", "ui.py", "catalogue.py", "player.py", "qr.py", "remote.py", "cast.py", "tmdb.py", "webview.py",
-           "countries.py", "i18n.py", "netfix.py", "updater.py"]
+           "countries.py", "i18n.py", "netfix.py", "updater.py", "epg.py", "subtitles.py", "telemetry.py"]
 ASSETS = ["Zono.ico", "zono_logo.png", "zono_mark.png", "locale/en.json", "locale/fr.json", "locale/de.json"]
 RUNTIME_PYTHON = "3.14"
 STUB = ('# Zono. The app itself is in zono_main.pyc; the source code is at github (see the README).\n'

@@ -62,6 +62,7 @@ class Smoke(unittest.TestCase):
         app.Player = fakes.FakePlayer
         app.webview.available = lambda: False
         cls.data, cls.app = data, app
+        helpers.fresh_ui()
         cls.root = tk.Tk()
         app.configure_scale(cls.root)
         cls.root.geometry("1360x860+0+0")
@@ -87,7 +88,9 @@ class Smoke(unittest.TestCase):
     def assert_clean(self, step):
         log = self.data.LOG
         text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
-        self.assertEqual(text, "", f"error after: {step}\n{text}")
+        # notices ("Melding: ...", e.g. the guide could not be fetched offline) are fine; errors are not
+        errors = "\n\n".join(b for b in text.split("\n\n") if b.strip() and "Melding:" not in b)
+        self.assertEqual(errors, "", f"error after: {step}\n{text}")
 
     def test_1_every_page(self):
         for tab in ("home", "live", "guide", "movie", "series", "favorites", "downloads", "settings", "home"):

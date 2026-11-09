@@ -1,5 +1,16 @@
 # Wijzigingen
 
+## 2.4.0
+- TV-gids voor M3U-afspeellijsten via XMLTV: de link uit de afspeellijst (url-tvg) of zelf ingevuld bij het koppelen.
+- Zoeken in de TV-gids: zoekresultaten tonen ook programma's van vandaag en morgen op je zenders.
+- Herinneringen: "Herinner me" bij een programma, met een melding (en knipperende taakbalk) als het begint.
+- Serie-opnames: "Elke aflevering opnemen" plant automatisch de volgende afleveringen in; beheren bij Downloads.
+- Ondertitels zoeken via OpenSubtitles in de speler (gratis sleutel, taal instelbaar).
+- Probleem melden vanuit de app (bericht + opgeschoond logboek naar support@zono.be).
+- Anonieme gebruiksstatistieken (uit te zetten) en privacyverklaring op zono.be/privacy.html.
+- Server-scripts voor zono.be in `server/`.
+- Download- en opnamemappen hebben vaste namen, ongeacht de taal.
+
 ## 2.3.3
 - Installer `Zono-Setup.exe` (NSIS): installeert per gebruiker zonder beheerdersrechten, snelkoppelingen "Zono" in Startmenu en op het bureaublad, vermelding in Instellingen › Apps met verwijderknop (vraagt of je gegevens bewaard blijven). In vier talen.
 - De updater houdt het versienummer in Instellingen › Apps bij.

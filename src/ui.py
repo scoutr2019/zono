@@ -225,6 +225,9 @@ def draw_icon(d, name, cx, cy, size, color):
         line((5, 12), (19, 12))
     elif name == "check":
         line((5, 12.5), (10, 17), (19, 7))
+    elif name == "send":  # paper plane
+        line((3.5, 11), (20.5, 4), (14, 20.5), (11, 13), (3.5, 11))
+        line((11, 13), (20.5, 4))
     elif name == "guide":
         rect(3.5, 5, 20.5, 20.5, 2.5)
         line((3.5, 10), (20.5, 10))

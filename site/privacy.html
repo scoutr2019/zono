@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zono TV · Privacy</title>
+<meta name="description" content="Wat Zono bewaart en wat niet.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHg9IjY0IiB5PSI2NCIgd2lkdGg9Ijg5NiIgaGVpZ2h0PSI4OTYiIHJ4PSIyNDUiIGZpbGw9IiM1MzUwZjYiLz4KICA8cGF0aCBkPSJNMzA0IDM0MEg3MTVWNDM4TDQ0OSA2OTdINzE4Vjc5OEgzMDFWNjk2TDU2OCA0MzhIMzA0WiIgZmlsbD0iI2ZmZiIvPgogIDxjaXJjbGUgY3g9Ijc0OSIgY3k9Ijc3MCIgcj0iNDkiIGZpbGw9IiNmZmQzNjUiLz4KPC9zdmc+Cg==">
+<style>
+:root{--ink:#10101b;--violet:#514eff;--paper:#f7f6ff;--line:rgba(19,17,42,.12);--muted:#5d5a72;--yellow:#ffd365}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 Manrope,"Segoe UI",system-ui,sans-serif}
+a{color:var(--violet)}
+header{background:radial-gradient(circle at 85% 0,#8c71ff 0,transparent 35%),linear-gradient(135deg,#4b4aef,#763df7);color:#fff;padding:26px clamp(16px,6vw,90px) 70px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;font-weight:800;font-size:22px}
+.brand i{width:34px;height:34px;border-radius:11px;background:#fff;color:#4b4aef;display:grid;place-items:center;font-style:normal;font-weight:900}
+.langs{display:flex;gap:6px;flex-wrap:wrap}
+.langs a{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
+.langs a[aria-current=true]{background:#fff;color:#4b4aef}
+h1{font:900 clamp(36px,6vw,64px)/1 "Nunito",system-ui,sans-serif;letter-spacing:-.04em;margin:46px 0 12px}
+header p{max-width:640px;color:rgba(255,255,255,.85);font-size:18px;margin:0}
+main{max-width:860px;margin:-40px auto 60px;padding:0 16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:26px clamp(18px,4vw,36px);margin-bottom:16px;box-shadow:0 18px 40px rgba(38,26,120,.06)}
+h2{font:800 22px/1.2 "Nunito",system-ui,sans-serif;margin:0 0 10px}
+ul{margin:8px 0 0;padding-left:20px}li{margin:4px 0}
+.never{border-left:4px solid var(--yellow)}
+small,.muted{color:var(--muted)}
+footer{text-align:center;color:var(--muted);font-size:14px;padding:0 16px 40px}
+[data-lang]{display:none}[data-lang].on{display:block}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <a class="brand" href="/"><i>z</i>zono tv</a>
+    <nav class="langs" aria-label="Taal / Language">
+      <a href="?lang=nl" data-pick="nl">Nederlands</a><a href="?lang=fr" data-pick="fr">Français</a><a href="?lang=en" data-pick="en">English</a><a href="?lang=de" data-pick="de">Deutsch</a>
+    </nav>
+  </div>
+  <div data-lang="nl"><h1>Privacy</h1><p>Wat Zono bewaart en wat niet, in gewone woorden. Laatst bijgewerkt: 9 november 2026.</p></div>
+  <div data-lang="fr"><h1>Confidentialité</h1><p>Ce que Zono conserve et ce qu'il ne conserve pas, en mots simples. Dernière mise à jour : 9 novembre 2026.</p></div>
+  <div data-lang="en"><h1>Privacy</h1><p>What Zono keeps and what it doesn't, in plain words. Last updated: 9 November 2026.</p></div>
+  <div data-lang="de"><h1>Datenschutz</h1><p>Was Zono speichert und was nicht, in einfachen Worten. Zuletzt aktualisiert: 9. November 2026.</p></div>
+</header>
+<main>
+
+<div data-lang="nl">
+  <div class="card"><h2>Alles blijft op je eigen pc</h2>
+    <p>Zono bewaart je gegevens alleen op je eigen computer, in <code>%LOCALAPPDATA%\Zono</code>: je provider (je wachtwoord versleuteld met Windows), je bibliotheek, favorieten, kijkvoortgang, opnames, downloads, instellingen en het logboek. Wij krijgen dat niet te zien.</p></div>
+  <div class="card never"><h2>Wat we nooit verzamelen</h2>
+    <ul><li>wat je kijkt, je zenders, films of series</li><li>je provider, gebruikersnaam of wachtwoord</li><li>je naam of de naam van je computer</li><li>je IP-adres (zie de uitzondering bij meldingen)</li></ul></div>
+  <div class="card"><h2>Anonieme gebruiksstatistieken (uit te zetten)</h2>
+    <p>Eén keer per dag stuurt Zono naar zono.be: een willekeurig nummer dat op je pc gemaakt werd (niet gekoppeld aan jou), de Zono-versie, de taal van de app en de Windows-versie. Zo weten we hoeveel mensen Zono gebruiken en welke versies nog draaien. Uitzetten kan in Zono bij <b>Instellingen › Opslag en hulp</b>.</p></div>
+  <div class="card"><h2>Probleem melden</h2>
+    <p>Alleen als jij op <b>Versturen</b> klikt, krijgen we je bericht, je e-mailadres (als je dat invult) en, als je dat aanzet, het logboek van Zono. Uit het logboek haalt Zono eerst providerlogins en je Windows-gebruikersnaam. We bewaren meldingen 90 dagen. Om misbruik te voorkomen houdt de server één dag een versleutelde (gehashte) vorm van je IP-adres bij.</p></div>
+  <div class="card"><h2>Diensten van anderen</h2>
+    <ul>
+      <li><b>Updates:</b> Zono vraagt GitHub (github.com) of er een nieuwe versie is en downloadt die daar.</li>
+      <li><b>Je provider:</b> de streams, gids en afbeeldingen komen rechtstreeks van je eigen provider.</li>
+      <li><b>Lukt het opzoeken van een server niet</b>, dan vraagt Zono het adres aan Cloudflare (1.1.1.1) of Google (8.8.8.8).</li>
+      <li><b>Optioneel:</b> met een eigen sleutel haalt Zono informatie bij The Movie Database (TMDB) of ondertitels bij OpenSubtitles.</li>
+      <li><b>Deze website</b> toont de nieuwste versie en de nieuwigheden via GitHub, en onthoudt je taalkeuze in je eigen browser.</li>
+    </ul>
+    <p class="muted">Die diensten zien je verzoeken volgens hun eigen privacybeleid.</p></div>
+  <div class="card"><h2>Je rechten</h2>
+    <p>Je kan altijd vragen welke gegevens we van je hebben, of ze laten wissen: mail <a href="mailto:support@zono.be">support@zono.be</a>. Zono levert zelf geen zenders, films of series.</p></div>
+</div>
+
+<div data-lang="fr">
+  <div class="card"><h2>Tout reste sur votre PC</h2>
+    <p>Zono conserve vos données uniquement sur votre ordinateur, dans <code>%LOCALAPPDATA%\Zono</code> : votre fournisseur (mot de passe chiffré par Windows), votre bibliothèque, vos favoris, votre progression, vos enregistrements, téléchargements, paramètres et le journal. Nous n'y avons pas accès.</p></div>
+  <div class="card never"><h2>Ce que nous ne collectons jamais</h2>
+    <ul><li>ce que vous regardez, vos chaînes, films ou séries</li><li>votre fournisseur, identifiant ou mot de passe</li><li>votre nom ou le nom de votre ordinateur</li><li>votre adresse IP (voir l'exception pour les signalements)</li></ul></div>
+  <div class="card"><h2>Statistiques d'utilisation anonymes (désactivables)</h2>
+    <p>Une fois par jour, Zono envoie à zono.be : un numéro aléatoire créé sur votre PC (non lié à vous), la version de Zono, la langue de l'application et la version de Windows. Cela nous indique combien de personnes utilisent Zono et quelles versions sont encore actives. Vous pouvez désactiver cela dans <b>Paramètres › Stockage et aide</b>.</p></div>
+  <div class="card"><h2>Signaler un problème</h2>
+    <p>Uniquement si vous cliquez sur <b>Envoyer</b>, nous recevons votre message, votre adresse e-mail (si vous la saisissez) et, si vous l'activez, le journal de Zono. Zono en retire d'abord les identifiants du fournisseur et votre nom d'utilisateur Windows. Les signalements sont conservés 90 jours. Pour éviter les abus, le serveur garde pendant un jour une forme chiffrée (hachée) de votre adresse IP.</p></div>
+  <div class="card"><h2>Services de tiers</h2>
+    <ul>
+      <li><b>Mises à jour :</b> Zono demande à GitHub (github.com) s'il existe une nouvelle version et la télécharge.</li>
+      <li><b>Votre fournisseur :</b> les flux, le guide et les images viennent directement de votre fournisseur.</li>
+      <li><b>Si un serveur est introuvable</b>, Zono demande son adresse à Cloudflare (1.1.1.1) ou Google (8.8.8.8).</li>
+      <li><b>En option :</b> avec votre propre clé, Zono interroge The Movie Database (TMDB) ou OpenSubtitles.</li>
+      <li><b>Ce site</b> affiche la dernière version et les nouveautés via GitHub et mémorise votre langue dans votre navigateur.</li>
+    </ul>
+    <p class="muted">Ces services voient vos requêtes selon leur propre politique de confidentialité.</p></div>
+  <div class="card"><h2>Vos droits</h2>
+    <p>Vous pouvez toujours demander quelles données nous avons ou les faire effacer : écrivez à <a href="mailto:support@zono.be">support@zono.be</a>. Zono ne fournit ni chaînes, ni films, ni séries.</p></div>
+</div>
+
+<div data-lang="en">
+  <div class="card"><h2>Everything stays on your PC</h2>
+    <p>Zono keeps your data only on your own computer, in <code>%LOCALAPPDATA%\Zono</code>: your provider (password encrypted by Windows), library, favourites, watch progress, recordings, downloads, settings and the log. We never see it.</p></div>
+  <div class="card never"><h2>What we never collect</h2>
+    <ul><li>what you watch, your channels, movies or series</li><li>your provider, username or password</li><li>your name or your computer's name</li><li>your IP address (see the exception for problem reports)</li></ul></div>
+  <div class="card"><h2>Anonymous usage statistics (can be turned off)</h2>
+    <p>Once a day Zono sends zono.be: a random number created on your PC (not linked to you), the Zono version, the app language and the Windows version. This tells us how many people use Zono and which versions are still running. Turn it off in <b>Settings › Storage and help</b>.</p></div>
+  <div class="card"><h2>Reporting a problem</h2>
+    <p>Only when you click <b>Send</b> do we receive your message, your email address (if you enter it) and, if you switch it on, Zono's log. Zono first removes provider logins and your Windows user name from the log. Reports are kept for 90 days. To prevent abuse, the server keeps a hashed form of your IP address for one day.</p></div>
+  <div class="card"><h2>Other services</h2>
+    <ul>
+      <li><b>Updates:</b> Zono asks GitHub (github.com) whether there is a new version and downloads it from there.</li>
+      <li><b>Your provider:</b> streams, guide and pictures come straight from your own provider.</li>
+      <li><b>If a server can't be found</b>, Zono asks Cloudflare (1.1.1.1) or Google (8.8.8.8) for its address.</li>
+      <li><b>Optional:</b> with your own key Zono asks The Movie Database (TMDB) for information or OpenSubtitles for subtitles.</li>
+      <li><b>This website</b> shows the latest version and what's new via GitHub and remembers your language in your own browser.</li>
+    </ul>
+    <p class="muted">These services see your requests under their own privacy policies.</p></div>
+  <div class="card"><h2>Your rights</h2>
+    <p>You can always ask what data we hold about you, or have it deleted: email <a href="mailto:support@zono.be">support@zono.be</a>. Zono does not provide channels, movies or series.</p></div>
+</div>
+
+<div data-lang="de">
+  <div class="card"><h2>Alles bleibt auf deinem PC</h2>
+    <p>Zono speichert deine Daten nur auf deinem eigenen Computer, in <code>%LOCALAPPDATA%\Zono</code>: deinen Anbieter (Passwort von Windows verschlüsselt), deine Mediathek, Favoriten, deinen Fortschritt, Aufnahmen, Downloads, Einstellungen und das Protokoll. Wir sehen davon nichts.</p></div>
+  <div class="card never"><h2>Was wir nie sammeln</h2>
+    <ul><li>was du schaust, deine Sender, Filme oder Serien</li><li>deinen Anbieter, Benutzernamen oder dein Passwort</li><li>deinen Namen oder den Namen deines Computers</li><li>deine IP-Adresse (siehe die Ausnahme bei Problemmeldungen)</li></ul></div>
+  <div class="card"><h2>Anonyme Nutzungsstatistik (abschaltbar)</h2>
+    <p>Einmal am Tag sendet Zono an zono.be: eine Zufallszahl, die auf deinem PC erzeugt wurde (nicht mit dir verknüpft), die Zono-Version, die App-Sprache und die Windows-Version. So wissen wir, wie viele Menschen Zono nutzen und welche Versionen noch laufen. Abschalten unter <b>Einstellungen › Speicher und Hilfe</b>.</p></div>
+  <div class="card"><h2>Problem melden</h2>
+    <p>Nur wenn du auf <b>Senden</b> klickst, erhalten wir deine Nachricht, deine E-Mail-Adresse (falls angegeben) und, wenn du es einschaltest, das Zono-Protokoll. Zono entfernt daraus vorher Anbieter-Zugangsdaten und deinen Windows-Benutzernamen. Meldungen werden 90 Tage aufbewahrt. Gegen Missbrauch speichert der Server einen Tag lang eine gehashte Form deiner IP-Adresse.</p></div>
+  <div class="card"><h2>Dienste Dritter</h2>
+    <ul>
+      <li><b>Updates:</b> Zono fragt GitHub (github.com) nach einer neuen Version und lädt sie dort herunter.</li>
+      <li><b>Dein Anbieter:</b> Streams, Programm und Bilder kommen direkt von deinem eigenen Anbieter.</li>
+      <li><b>Wird ein Server nicht gefunden</b>, fragt Zono Cloudflare (1.1.1.1) oder Google (8.8.8.8) nach seiner Adresse.</li>
+      <li><b>Optional:</b> mit eigenem Schlüssel fragt Zono The Movie Database (TMDB) nach Infos oder OpenSubtitles nach Untertiteln.</li>
+      <li><b>Diese Website</b> zeigt die neueste Version und Neuerungen über GitHub und merkt sich deine Sprache in deinem Browser.</li>
+    </ul>
+    <p class="muted">Diese Dienste sehen deine Anfragen gemäß ihren eigenen Datenschutzrichtlinien.</p></div>
+  <div class="card"><h2>Deine Rechte</h2>
+    <p>Du kannst jederzeit fragen, welche Daten wir über dich haben, oder sie löschen lassen: Schreib an <a href="mailto:support@zono.be">support@zono.be</a>. Zono liefert keine Sender, Filme oder Serien.</p></div>
+</div>
+
+</main>
+<footer>© 2026 Zono TV · <a href="/">zono.be</a> · <a href="mailto:support@zono.be">support@zono.be</a></footer>
+<script>
+(function(){
+  var langs=['nl','fr','en','de'], pick=new URLSearchParams(location.search).get('lang');
+  try{ pick=pick||localStorage.getItem('zono-language'); }catch(e){}
+  if(langs.indexOf(pick)<0){ var b=(navigator.language||'nl').slice(0,2); pick=langs.indexOf(b)>=0?b:'nl'; }
+  document.documentElement.lang=pick;
+  document.querySelectorAll('[data-lang]').forEach(function(e){ e.classList.toggle('on', e.getAttribute('data-lang')===pick); });
+  document.querySelectorAll('[data-pick]').forEach(function(a){ a.setAttribute('aria-current', String(a.getAttribute('data-pick')===pick)); });
+  document.title={nl:'Zono TV · Privacy',fr:'Zono TV · Confidentialité',en:'Zono TV · Privacy',de:'Zono TV · Datenschutz'}[pick];
+})();
+</script>
+</body>
+</html>

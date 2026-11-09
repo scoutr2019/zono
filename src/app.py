@@ -36,11 +36,14 @@ import threading
 from ui import (BG, SIDE, PANEL, RAISED, LINE, TEXT, SOFT, MUTED, DIM, ACCENT, ACCENT_SOFT, LIVE_RED, FONT,
                 Pill, Slider, Switch, S, label, elide)
 import i18n
+import epg
 import netfix
+import subtitles
+import telemetry
 import updater
 from i18n import T
 
-VERSION = "2.3.3"
+VERSION = "2.4.0"
 TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
         "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False
@@ -301,6 +304,7 @@ class Zono:
         self.art_workers = ThreadPoolExecutor(max_workers=5)
         self.art_lock = threading.BoundedSemaphore(3)
         self.art_fix, self.art_fix_saved, self.art_fix_dirty = {}, monotonic(), False
+        self.reminders, self.series_rules, self.series_checked = [], [], 0
         self.guide_workers = ThreadPoolExecutor(max_workers=4)
         self.download_workers = ThreadPoolExecutor(max_workers=1)
         self.art_jobs = []
@@ -309,6 +313,7 @@ class Zono:
         self.hero_canvas = None
         self.hero_art = {}
         self.guide_cache = {}
+        self.epg, self.epg_generation = None, 0
         self.live_nav = self.live_layout = None
         self.episode_anchor = None
         self.toast_widget = None
@@ -392,6 +397,7 @@ class Zono:
         root.after(5000, self.recording_tick)
         self.update_info, self.update_state = None, "idle"
         root.after(12000, lambda: self.check_update(quiet=True))
+        root.after(20000, self.send_ping)
         root.after(4000, self.after_update)
         everyone = profiles["profiles"]
         last = next((p for p in everyone if p["id"] == profiles.get("last")), everyone[0])
@@ -438,6 +444,11 @@ class Zono:
         self.favorites = state.get("favorites", {})
         self.progress = state.get("progress", {})
         self.downloaded = data.unseal(data.read_json(data.STATE.with_name("downloads.json"), []), self.source)
+        reminders = data.unseal(data.read_json(data.STATE.with_name("reminders.json"), {}), self.source)
+        reminders = reminders if isinstance(reminders, dict) else {}
+        self.reminders = [r for r in reminders.get("reminders", []) if isinstance(r, dict)]
+        self.series_rules = [r for r in reminders.get("series", []) if isinstance(r, dict)]
+        self.series_checked = 0
         recordings = data.unseal(data.read_json(data.STATE.with_name("recordings.json"), []), self.source)
         running = [r for r in getattr(self, "recordings", []) if r.get("id") in getattr(self, "recorders", {})]
         loaded = [r for r in recordings if isinstance(r, dict)] if isinstance(recordings, list) else []
@@ -456,6 +467,9 @@ class Zono:
         trace("bibliotheek klaargezet")
         self.hero_art.clear()
         self.guide_cache.clear()
+        self.epg, self.epg_loading = None, False
+        self.epg_generation += 1
+        self.root.after(3000, self.load_epg)
         self.autoplayed = False
         self.feature_index = 0
         self.profiles["last"] = profile["id"]
@@ -1200,6 +1214,8 @@ class Zono:
             self.toast(T("Logboek gewist"), "trash")
         Pill(tools, T("Kopiëren"), copy, kind="primary", icon="check", h=40, padx=16).pack(side="left")
         Pill(tools, T("Wissen"), clear, kind="ghost", icon="trash", h=40, padx=16).pack(side="left", padx=S(10))
+        Pill(tools, T("Probleem melden"), lambda: self.report_problem(), kind="ghost", icon="send", h=40,
+             padx=16).pack(side="left")
 
     def content_resized(self, _=None):
         if _ is not None and getattr(_, "widget", None) is not self.content:
@@ -1382,7 +1398,9 @@ class Zono:
         if query:
             results = [i for i in self.library if query in str(i["title"]).casefold()]
             self.page_header(T("Zoekresultaten"), T('{} titels voor “{}”').format(number(len(results)), self.query.get().strip()))
-            self.section(None, results, grid=True)
+            programmes = self.guide_results(query)
+            if results or not programmes:
+                self.section(None, results, grid=True)
             return
         if self.tab == "home":
             self.home_view()
@@ -1582,7 +1600,7 @@ class Zono:
         shown = {key for key, on in self.home_layout() if on}
 
         def now_playing(tile, item):
-            if item.get("sid") and self.source:
+            if self.has_guide(item):
                 self.fetch_guide(item, lambda rows, t=tile: t.set_now(rows) if t.winfo_exists() else None)
 
         def welcome():
@@ -2072,7 +2090,7 @@ class Zono:
         label(texts, elide(str(current.get("title", "")), 15, S(420), True), 15, TEXT, PANEL, True).pack(anchor="w")
         detail = label(texts, T("Live TV") if live else KIND_LABEL.get(current.get("kind"), ""), 10, MUTED, PANEL)
         detail.pack(anchor="w")
-        if live and current.get("sid") and self.source:
+        if live and self.has_guide(current):
             def show_now(rows, widget=detail):
                 program = current_program(rows)
                 if program and widget.winfo_exists():
@@ -2606,6 +2624,81 @@ class Zono:
                 data.log_note(f"Update zoeken lukte niet: {type(error).__name__}: {error}")
         self.run(work, done, failed)
 
+    def send_ping(self):
+        """Anonymous daily statistics (off in Instellingen › Opslag en hulp). Never bothers the user."""
+        if updater.running_folder() is None and not os.environ.get("ZONO_TEST_UPDATER"):
+            return  # a developer running the source
+        self.run(lambda: telemetry.ping(VERSION, i18n.CODE), lambda _: None,
+                 lambda error: trace(f"statistiek niet verstuurd: {type(error).__name__}"))
+
+    def report_problem(self, prefill=""):
+        """Send a message and (if the user agrees) the log to support@zono.be, from inside the app."""
+        card = self.sheet(560, 0)
+        body = tk.Frame(card, bg=SIDE, padx=S(32), pady=S(28))
+        body.pack(fill="both", expand=True)
+        label(body, T("Probleem melden"), 20, TEXT, SIDE, True).pack(anchor="w")
+        label(body, T("Vertel kort wat er misging. We lezen elke melding."), 10, MUTED, SIDE).pack(anchor="w", pady=(S(2), S(14)))
+        box = tk.Frame(body, bg=PANEL, highlightthickness=1, highlightbackground=LINE)
+        box.pack(fill="x")
+        message = tk.Text(box, height=6, wrap="word", bg=PANEL, fg=TEXT, insertbackground=TEXT, relief="flat",
+                          font=(FONT, 11), padx=S(12), pady=S(10), highlightthickness=0)
+        message.pack(fill="x")
+        if prefill:
+            message.insert("1.0", prefill)
+        message.focus_set()
+        contact = tk.StringVar()
+        self.field(body, T("Je e-mailadres (optioneel, als je een antwoord wilt)"), contact)
+        include = {"value": True}
+        row = tk.Frame(body, bg=SIDE)
+        row.pack(anchor="w", fill="x", pady=(S(14), 0))
+        Switch(row, True, lambda on: include.update(value=on)).pack(side="left", anchor="n")
+        texts = tk.Frame(row, bg=SIDE)
+        texts.pack(side="left", padx=S(12))
+        label(texts, T("Logboek meesturen"), 10, TEXT, SIDE, True).pack(anchor="w")
+        label(texts, T("Foutmeldingen van Zono, zonder je wachtwoord of providerlogin. Met de versie, taal en "
+                       "Windows-versie."), 9, MUTED, SIDE, wraplength=S(440), justify="left").pack(anchor="w")
+        status = label(body, "", 10, ACCENT_SOFT, SIDE, wraplength=S(480), justify="left")
+        status.pack(anchor="w", pady=(S(12), 0))
+        buttons = tk.Frame(body, bg=SIDE)
+        buttons.pack(anchor="w", pady=(S(12), 0))
+
+        def send():
+            text = message.get("1.0", "end").strip()
+            email = contact.get().strip()
+            if not text and not include["value"]:
+                status.configure(text=T("Schrijf een bericht of stuur het logboek mee."))
+                return
+            if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                status.configure(text=T("Dit e-mailadres klopt niet."))
+                return
+            try:
+                log = data.LOG.read_text(encoding="utf-8", errors="replace") if include["value"] and data.LOG.exists() else ""
+            except OSError:
+                log = ""
+            start_log = data.ROOT / "start.log"
+            if include["value"] and start_log.exists():
+                try:
+                    log += "\n--- Laatste start ---\n" + start_log.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    pass
+            send_button.set_enabled(False)
+            status.configure(text=T("Versturen…"))
+
+            def sent(number):
+                if card.winfo_exists():
+                    card.close()
+                self.toast(T("Bedankt! Je melding is verstuurd (#{})").format(number), "check")
+
+            def failed(error):
+                if status.winfo_exists():
+                    send_button.set_enabled(True)
+                    status.configure(text=T("Versturen lukte niet: {}. Mail ons gerust op support@zono.be.").format(
+                        error_text(error)))
+            self.run(lambda: telemetry.report(VERSION, i18n.CODE, text, email, log), sent, failed)
+        send_button = Pill(buttons, T("Versturen"), send, kind="primary", icon="send", h=42, padx=20)
+        send_button.pack(side="left")
+        Pill(buttons, T("Annuleren"), lambda: card.close(), kind="ghost", h=42, padx=18).pack(side="left", padx=S(10))
+
     def show_update_ready(self):
         slot = getattr(self, "update_slot", None)
         if slot is None or not slot.winfo_exists():
@@ -3130,10 +3223,117 @@ class Zono:
 
     # ------------------------------------------------------------ programme guide data
 
+    def epg_url(self):
+        """Where the XMLTV guide comes from: the playlist's own link or one typed in, else the Xtream provider's."""
+        link = str((self.state or {}).get("epg_url") or "").strip()
+        if link:
+            return link
+        if self.source and self.source.get("server"):
+            from urllib.parse import urlencode
+            base = data.server_base(self.source)
+            return f"{base}/xmltv.php?" + urlencode({"username": self.source.get("user", ""),
+                                                      "password": self.source.get("password", "")})
+        return ""
+
+    def load_epg(self, force=False, for_search=False, then=None):
+        """Download (at most every 6 hours) and read the XMLTV guide in the background.
+
+        M3U playlists: at start (they have no other guide). Xtream providers have their own guide per channel, so
+        their (often very big) XMLTV file is only fetched when someone searches the guide."""
+        url = self.epg_url()
+        if not url or (self.source and not for_search and not (self.state or {}).get("epg_url")):
+            return
+        if self.epg is not None and not force:
+            if then:
+                then()
+            return
+        if getattr(self, "epg_loading", False) and not force:
+            return  # already on its way; the screen is refreshed when it arrives
+        self.epg_loading = True
+        keep = None
+        if self.source:  # only the channels in the library
+            keep = {i["epg"] for i in self.by_kind.get("live", []) if i.get("epg")} or None
+        self.epg_generation += 1
+        generation, folder = self.epg_generation, data.STATE.parent / "guide"
+
+        def work():
+            path = epg.download(url, folder, max_age=0 if force else epg.MAX_AGE)
+            return epg.Guide.load(path, keep=keep)
+
+        def done(guide):
+            if generation != self.epg_generation:
+                return
+            self.epg_loading = False
+            self.epg = guide if len(guide) else None
+            if self.epg is None:
+                self.epg_failed = monotonic()
+            self.guide_cache.clear()
+            trace(f"gids geladen: {len(guide)} programma's")
+            if then:
+                then()
+            elif self.epg is not None and self.tab in ("guide", "live") and not self.query.get().strip():
+                self.render()
+
+        def failed(error):
+            if generation == self.epg_generation:
+                self.epg_loading = False
+                self.epg_failed = monotonic()
+                data.log_note(f"De TV-gids (XMLTV) laden lukte niet: {type(error).__name__}: {error}")
+                if then:
+                    then()
+        self.run(work, done, failed, executor=self.guide_workers)
+
+    def guide_results(self, query):
+        """Programmes on the user's channels whose title matches the search, now and in the next two days."""
+        holder = tk.Frame(self.content, bg=BG)
+        holder.pack(fill="x", padx=S(44), pady=(0, S(10)))
+        if not self.by_kind.get("live") or not self.epg_url():
+            holder.destroy()
+            return
+        if self.epg is None and monotonic() - getattr(self, "epg_failed", -1e9) < 600:
+            holder.destroy()  # the guide could not be read a moment ago: do not try again on every search
+            return
+        if self.epg is None:
+            label(holder, T("TV-gids doorzoeken…"), 10, MUTED).pack(anchor="w")
+            generation = self.generation
+            self.load_epg(for_search=True, then=lambda: generation == self.generation and self.render())
+            return
+        matches = self.epg.search(query, self.by_kind["live"])
+        if not matches:
+            holder.destroy()
+            return 0
+        label(holder, T("IN DE TV-GIDS"), 8, DIM, BG, True).pack(anchor="w", pady=(0, S(8)))
+        moment = time()
+        for channel, program in matches[:12]:
+            row = tk.Frame(holder, bg=PANEL, padx=S(16), pady=S(10), cursor="hand2")
+            row.pack(fill="x", pady=(0, S(6)))
+            live_now = program["start"] <= moment < program["end"]
+            day = datetime.fromtimestamp(program["start"])
+            when = T("Nu") if live_now else (T("Vandaag") if day.date() == datetime.now().date()
+                                              else T(WEEKDAYS[day.weekday()]))
+            label(row, f"{when}  {hhmm(program['start'])}", 10, LIVE_RED if live_now else ACCENT_SOFT, PANEL,
+                  True, width=14, anchor="w").pack(side="left")
+            texts = tk.Frame(row, bg=PANEL)
+            texts.pack(side="left", fill="x", expand=True)
+            label(texts, elide(program["title"] or T("Programma"), 11, S(620), True), 11, TEXT, PANEL, True).pack(anchor="w")
+            label(texts, elide(str(channel.get("title", "")), 9, S(620)), 9, MUTED, PANEL).pack(anchor="w")
+            open_it = lambda _=None, c=channel, p=program: self.program_sheet(c, p, self.by_kind.get("live"))
+            for widget in (row, texts, *row.winfo_children(), *texts.winfo_children()):
+                widget.bind("<ButtonRelease-1>", open_it)
+        return len(matches)
+
+    def has_guide(self, item):
+        """Guide data for this channel: from the Xtream provider, or from an XMLTV guide (M3U playlists)."""
+        return bool((item.get("sid") and self.source) or (self.epg is not None and self.epg.channel_for(item)))
+
     def fetch_guide(self, item, done, failed=lambda _: None, full=False):
         sid = item.get("sid")
         if not sid or not self.source:
-            done([])
+            if self.epg is None:
+                done([])
+                return
+            shift = int(float(self.preferences.get("epg_offset", 0) or 0) * 3600)
+            done([dict(r, start=r["start"] + shift, end=r["end"] + shift) for r in self.epg.rows(item)])
             return
         key = ("full", sid) if full else sid
         cached = self.guide_cache.get(key)
@@ -3178,6 +3378,114 @@ class Zono:
 
     # ------------------------------------------------------------ recordings
 
+    # ------------------------------------------------------------ reminders and series recordings
+
+    def save_reminders(self):
+        try:
+            data.write_json(data.STATE.with_name("reminders.json"),
+                            data.seal({"reminders": self.reminders, "series": self.series_rules}, self.source))
+        except OSError as error:
+            self.toast(elide(error_text(error), 10, S(480), True), "close")
+
+    def reminder_for(self, channel, program):
+        return next((r for r in self.reminders if r.get("channel_id") == channel["id"]
+                     and int(r.get("start", 0)) == int(program["start"])), None)
+
+    def toggle_reminder(self, channel, program):
+        found = self.reminder_for(channel, program)
+        if found:
+            self.reminders.remove(found)
+            self.toast(T("Herinnering verwijderd"), "close")
+        else:
+            self.reminders.append({"channel_id": channel["id"], "channel": channel.get("title", ""),
+                                   "title": program.get("title") or T("Programma"), "start": int(program["start"]),
+                                   "end": int(program["end"]), "notified": False})
+            self.toast(T("Zono herinnert je om {}").format(hhmm(program["start"])), "check")
+        self.save_reminders()
+
+    @staticmethod
+    def series_key(title):
+        """ "Thuis (S30E12)", "THUIS - aflevering 5" and "Thuis" all count as the series "thuis"."""
+        text = re.sub(r"\s*[\(\[].*$|\s+[-–]\s+.*$|\s*[:|]\s+.*$|\s+S\d+\s*E\d+.*$|\s+(?:afl|aflevering|episode|ep)\.?\s*\d+.*$",
+                      "", str(title or ""), flags=re.I)
+        return re.sub(r"[^\w]+", " ", text).strip().casefold()
+
+    def series_rule_for(self, channel, program):
+        key = self.series_key(program.get("title"))
+        return next((r for r in self.series_rules if r.get("channel_id") == channel["id"] and r.get("key") == key), None)
+
+    def toggle_series(self, channel, program):
+        found = self.series_rule_for(channel, program)
+        if found:
+            self.series_rules.remove(found)
+            self.toast(T("Serie-opname gestopt"), "close")
+        else:
+            self.series_rules.append({"channel_id": channel["id"], "channel": channel.get("title", ""),
+                                      "title": program.get("title") or T("Programma"),
+                                      "key": self.series_key(program.get("title"))})
+            self.toast(T("Zono neemt elke aflevering van {} op").format(elide(program.get("title") or "", 10, S(240), True)),
+                       "record")
+            self.series_checked = 0
+        self.save_reminders()
+        self.check_series()
+
+    def check_series(self):
+        """Plan recordings for the next episodes of every series rule (from the guide data)."""
+        self.series_checked = monotonic()
+        channels = {i["id"]: i for i in self.by_kind.get("live", [])}
+        for rule in list(self.series_rules):
+            channel = channels.get(rule.get("channel_id"))
+            if channel is None or not self.has_guide(channel):
+                continue
+
+            def plan(rows, channel=channel, rule=rule):
+                moment = time()
+                for row in rows:
+                    if row["end"] > moment and row["start"] < moment + 2 * 86400 \
+                            and self.series_key(row.get("title")) == rule.get("key") \
+                            and not self.recording_for(channel, row):
+                        self.plan_recording(channel, row, quiet=True)
+            self.fetch_guide(channel, plan)
+
+    def check_reminders(self, now):
+        changed = False
+        for reminder in list(self.reminders):
+            if now >= reminder["end"]:
+                self.reminders.remove(reminder)
+                changed = True
+            elif not reminder.get("notified") and now >= reminder["start"] - 60:
+                reminder["notified"] = True
+                changed = True
+                self.remind(reminder)
+        if changed:
+            self.save_reminders()
+
+    def remind(self, reminder):
+        """The programme starts: a panel with "Watch now" (or a short message while watching), and a blinking
+        taskbar button when Zono is in the background."""
+        channel = next((i for i in self.by_kind.get("live", []) if i["id"] == reminder["channel_id"]), None)
+        text = T("Begint nu: {} op {}").format(reminder["title"], reminder["channel"])
+        try:
+            if os.name == "nt" and self.root.focus_displayof() is None:
+                ctypes.windll.user32.FlashWindow(ctypes.c_void_p(int(self.root.wm_frame(), 16)), True)
+        except (tk.TclError, ValueError, AttributeError, OSError):
+            pass
+        if self.session or self.sheet_close or channel is None:
+            self.toast(elide(text, 10, S(520), True), "guide")
+            return
+        card = None
+
+        def watch():
+            if card is not None:
+                card.close()
+            self.open_player(channel, self.by_kind.get("live") or [channel])
+
+        def later():
+            if card is not None:
+                card.close()
+        card = self.notes_panel(reminder["title"], T("Begint nu op {}").format(reminder["channel"]), [],
+                                [(T("Nu kijken"), watch, "primary", "play"), (T("Sluiten"), later, "ghost")])
+
     def save_recordings(self):
         try:
             data.write_json(data.STATE.with_name("recordings.json"), data.seal(self.recordings, self.source))
@@ -3188,7 +3496,7 @@ class Zono:
         return next((r for r in self.recordings if r.get("channel_id") == channel["id"]
                      and int(r.get("start", 0)) == int(program["start"]) and r.get("status") in ("planned", "recording")), None)
 
-    def plan_recording(self, channel, program):
+    def plan_recording(self, channel, program, quiet=False):
         if self.recording_for(channel, program):
             return
         title = program.get("title") or T("Programma")
@@ -3199,7 +3507,8 @@ class Zono:
             "store": str(data.STATE.with_name("downloads.json"))})
         self.save_recordings()
         when = "nu" if program["start"] <= time() else T('om {}').format(hhmm(program['start']))
-        self.toast(T('Opname gepland: {} · start {}').format(elide(title, 10, S(260), True), when), "record")
+        if not quiet:
+            self.toast(T('Opname gepland: {} · start {}').format(elide(title, 10, S(260), True), when), "record")
         self.recording_tick(reschedule=False)
 
     def cancel_recording(self, entry):
@@ -3250,7 +3559,7 @@ class Zono:
             self.render()
 
     def recording_path(self, title, channel, start):
-        folder = Path(self.preferences.get("download_folder", data.STATE.parent / T("Downloads"))) / T("Opnames")
+        folder = Path(self.preferences.get("download_folder", data.STATE.parent / "Downloads")) / "Opnames"
         name = re.sub(r'[^\w -]', "_", f"{title} - {channel}")[:80].strip() or T("Opname")
         stamp = datetime.fromtimestamp(start).strftime("%Y-%m-%d %H.%M")
         return folder / '{} {}.ts'.format(name, stamp)
@@ -3313,6 +3622,9 @@ class Zono:
         if self.art_fix_dirty and monotonic() - self.art_fix_saved > 15:
             self.save_art_fix(True)
         now = time()
+        self.check_reminders(now)
+        if self.series_rules and monotonic() - self.series_checked > 900:
+            self.check_series()
         changed = False
         for entry in list(self.recordings):
             status = entry.get("status")
@@ -3320,7 +3632,7 @@ class Zono:
                 entry["status"] = "missed"
                 changed = True
             elif status == "planned" and now >= entry["start"] - 60:
-                folder = Path(self.preferences.get("download_folder", data.STATE.parent / T("Downloads"))) / T("Opnames")
+                folder = Path(self.preferences.get("download_folder", data.STATE.parent / "Downloads")) / "Opnames"
                 name = re.sub(r'[^\w -]', "_", f"{entry['title']} - {entry['channel']}")[:80].strip() or T("Opname")
                 stamp = datetime.fromtimestamp(entry["start"]).strftime("%Y-%m-%d %H.%M")
                 path = folder / '{} {}.ts'.format(name, stamp)
@@ -3391,6 +3703,18 @@ class Zono:
                 Pill(buttons, T("Opnemen"), lambda: done(lambda: (self.plan_recording(channel, program), self.render())),
                      kind="ghost", icon="record", h=42, padx=18).pack(side="left")
         if not past:
+            more = tk.Frame(body, bg=SIDE)
+            more.pack(anchor="w", pady=(S(10), 0))
+            if not current:
+                reminded = self.reminder_for(channel, program)
+                Pill(more, T("Herinnering wissen") if reminded else T("Herinner me"),
+                     lambda: done(lambda: (self.toggle_reminder(channel, program), self.render())),
+                     kind="ghost", icon="check" if reminded else "guide", h=38, padx=14).pack(side="left", padx=(0, S(8)))
+            if channel.get("url") and self.series_key(program.get("title")):
+                rule = self.series_rule_for(channel, program)
+                Pill(more, T("Serie-opname stoppen") if rule else T("Elke aflevering opnemen"),
+                     lambda: done(lambda: (self.toggle_series(channel, program), self.render())),
+                     kind="ghost", icon="close" if rule else "record", h=38, padx=14).pack(side="left")
             label(body, T("Opnames lopen zolang Zono open staat (geminimaliseerd mag). Ze verschijnen daarna bij Downloads. "
                         "Kijk je tegelijk naar iets anders, dan gebruikt dat een tweede verbinding met je provider."),
                   9, MUTED, SIDE, wraplength=S(440), justify="left").pack(anchor="w", pady=(S(16), 0))
@@ -3545,7 +3869,7 @@ class Zono:
         if not entries:
             label(listing, T("Geen zenders in deze selectie."), 11, MUTED).pack(anchor="w", pady=S(20))
         for index, item in enumerate(shown[:14]):
-            if item.get("sid") and self.source:
+            if self.has_guide(item):
                 self.fetch_guide(item, lambda r, i=index: rows[i].set_now(r) if rows[i].winfo_exists() else None)
 
         def draw_meter(current, moment):
@@ -3618,7 +3942,7 @@ class Zono:
             self.listeners["slot"] = watch
             for child in programs.winfo_children():
                 child.destroy()
-            if not item.get("sid") or not self.source:
+            if not self.has_guide(item):
                 label(programs, T("Geen programmagegevens\nvoor deze bron."), 10, MUTED, PANEL, justify="left").pack(anchor="w")
                 return
             label(programs, T("Programma’s laden…"), 10, MUTED, PANEL).pack(anchor="w")
@@ -3709,7 +4033,7 @@ class Zono:
             Pill(box, T("Provider koppelen"), self.configure_source, kind="primary", icon="wifi", h=42).pack(pady=S(18))
             return
         self.category_chips(pool, pady=(0, 16))
-        with_guide = [i for i in entries if i.get("sid")]
+        with_guide = [i for i in entries if self.has_guide(i)]
         shown = with_guide[:self.limit]
         moment = time()
         midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
@@ -3910,7 +4234,7 @@ class Zono:
         if extension not in (".mp4", ".mkv", ".avi", ".webm", ".mov", ".m4v", ".ts"):
             self.toast(T("Deze titel kan niet gedownload worden"), "close")
             return
-        folder = Path(self.preferences.get("download_folder", data.STATE.parent / T("Downloads")))
+        folder = Path(self.preferences.get("download_folder", data.STATE.parent / "Downloads"))
         title = f"{item['series']} - {item['title']}" if item.get("series") else str(item["title"])
         name = re.sub(r'[^\w -]', "_", title)[:90].strip() or "Zono"
         path = folder / f"{name}-{uuid4().hex[:6]}{extension}"
@@ -3966,7 +4290,7 @@ class Zono:
         return T('{} MB').format(max(1, round(size / 1024 ** 2)))
 
     def downloads_view(self):
-        folder = self.preferences.get("download_folder", str(data.STATE.parent / T("Downloads")))
+        folder = self.preferences.get("download_folder", str(data.STATE.parent / "Downloads"))
         days = int(self.preferences.get("download_days", 30) or 0)
         total = sum(int(e.get("size") or 0) for e in self.downloaded)
         summary = T('{} titels op deze pc  ·  {}').format(len(self.downloaded), self.size_text(total)) if self.downloaded else \
@@ -4005,6 +4329,22 @@ class Zono:
                       9, MUTED, PANEL).pack(anchor="w")
                 Pill(row, T("Stoppen") if recording else T("Annuleren"), lambda e=entry: self.cancel_recording(e),
                      kind="ghost", icon="close", h=34, padx=12).pack(side="right")
+        if self.series_rules:
+            label(area, T("Serie-opnames"), 14, TEXT, BG, True).pack(anchor="w", pady=(S(8), S(8)))
+            for rule in list(self.series_rules):
+                row = tk.Frame(area, bg=PANEL, padx=S(16), pady=S(12))
+                row.pack(fill="x", pady=(0, S(6)))
+                texts = tk.Frame(row, bg=PANEL)
+                texts.pack(side="left")
+                label(texts, elide(rule["title"], 11, S(520), True), 11, TEXT, PANEL, True).pack(anchor="w")
+                label(texts, T("Elke aflevering op {}").format(rule.get("channel", "")), 9, MUTED, PANEL).pack(anchor="w")
+
+                def stop(rule=rule):
+                    self.series_rules.remove(rule)
+                    self.save_reminders()
+                    self.toast(T("Serie-opname gestopt"), "close")
+                    self.render()
+                Pill(row, T("Stoppen"), stop, kind="ghost", icon="close", h=34, padx=12).pack(side="right")
         if self.download_jobs:
             label(area, T("Bezig"), 14, TEXT, BG, True).pack(anchor="w", pady=(S(8), S(8)))
             bars = []
@@ -4322,6 +4662,26 @@ class Zono:
                  kind="quiet", icon="next", h=38, padx=14).pack(side="left", padx=S(10))
             result.pack(side="left", padx=S(8))
 
+        if not kids:
+            subs = self.panel(area, T("Ondertitels zoeken (optioneel)"),
+                              T("Met een gratis sleutel van opensubtitles.com zoekt Zono in de speler ondertitels voor films en "
+                                "afleveringen. Zonder account kan je er ongeveer 5 per dag downloaden."))
+            subs_var = tk.StringVar(value=self.preferences.get("opensubtitles_key", ""))
+            self.field(subs, T("OpenSubtitles API-sleutel"), subs_var, True)
+            languages = [("nl", "Nederlands"), ("fr", "Français"), ("en", "English"), ("de", "Deutsch")]
+            self.choice_row(subs, T("Taal van de ondertitels"), languages,
+                            self.preferences.get("subtitle_language", i18n.CODE), "subtitle_language")
+            row = tk.Frame(subs, bg=PANEL)
+            row.pack(anchor="w", pady=(S(12), 0))
+
+            def save_subs_key():
+                value = subs_var.get().strip()
+                self.set_pref("opensubtitles_key", value, T("Sleutel bewaard") if value else T("Sleutel verwijderd"))
+            Pill(row, T("Opslaan"), save_subs_key, kind="ghost", icon="check", h=38, padx=16).pack(side="left")
+            Pill(row, T("Gratis sleutel aanvragen"),
+                 lambda: webbrowser.open("https://www.opensubtitles.com/en/consumers"),
+                 kind="quiet", icon="next", h=38, padx=14).pack(side="left", padx=S(10))
+
         updates = self.panel(area, T("Updates"))
         self.switch_row(updates, T("Automatisch bijwerken"),
                         T("Zono zoekt bij het starten naar een nieuwe versie, haalt die op de achtergrond binnen en vraagt "
@@ -4352,8 +4712,22 @@ class Zono:
         Pill(buttons, T("Cache wissen"), clear_cache, kind="ghost", icon="trash", h=40).pack(side="left")
 
         Pill(buttons, T("Logboek openen"), self.show_log, kind="ghost", icon="info", h=40).pack(side="left", padx=S(10))
-        label(storage, T("Gaat er iets mis? In het logboek staat wat er gebeurde. Stuur het mee als je hulp vraagt."),
-              9, MUTED, PANEL).pack(anchor="w", pady=(S(8), 0))
+        Pill(buttons, T("Probleem melden"), self.report_problem, kind="ghost", icon="send", h=40).pack(side="left")
+        label(storage, T("Gaat er iets mis? Met ‘Probleem melden’ stuur je ons je bericht en het logboek, zodat we het "
+                         "kunnen oplossen."), 9, MUTED, PANEL, wraplength=S(640), justify="left").pack(anchor="w", pady=(S(8), 0))
+        share = tk.Frame(storage, bg=PANEL)
+        share.pack(anchor="w", fill="x", pady=(S(18), 0))
+        Switch(share, telemetry.sharing(), lambda on: (telemetry.set_sharing(on),
+                                                        self.toast(T("Opgeslagen")))).pack(side="left", anchor="n")
+        texts = tk.Frame(share, bg=PANEL)
+        texts.pack(side="left", padx=S(14))
+        label(texts, T("Anonieme gebruiksstatistieken delen"), 10, TEXT, PANEL, True).pack(anchor="w")
+        label(texts, T("Eén keer per dag: een willekeurig nummer, de versie, de taal en de Windows-versie. Nooit wat je "
+                       "kijkt, je provider of je naam. Zo weten we hoeveel mensen Zono gebruiken."),
+              9, MUTED, PANEL, wraplength=S(600), justify="left").pack(anchor="w")
+        privacy = label(texts, T("Privacyverklaring op zono.be"), 9, ACCENT_SOFT, PANEL, cursor="hand2")
+        privacy.pack(anchor="w", pady=(S(4), 0))
+        privacy.bind("<ButtonRelease-1>", lambda _: webbrowser.open(f"https://zono.be/privacy.html?lang={i18n.CODE}"))
 
         keys = self.panel(area, T("Sneltoetsen"))
         table = tk.Frame(keys, bg=PANEL)
@@ -4414,6 +4788,7 @@ class Zono:
         fields.pack(fill="x")
         values = [tk.StringVar(value=(self.source or {}).get(key, "")) for key in ("server", "user", "password")]
         link, path = tk.StringVar(), tk.StringVar()
+        guide_link = tk.StringVar(value=str((self.state or {}).get("epg_url") or "") if not self.source else "")
 
         def switch(value=None):
             if value is not None:
@@ -4434,6 +4809,7 @@ class Zono:
                     if chosen:
                         path.set(chosen)
                 Pill(fields, T("Bestand kiezen"), browse, kind="ghost", icon="folder", h=36).pack(anchor="w", pady=(S(10), 0))
+                self.field(fields, T("TV-gids: XMLTV-link (optioneel, staat soms al in de afspeellijst)"), guide_link)
         for value, text in ((0, T("Xtream Codes")), (1, "M3U")):
             tabs[value] = Pill(segment, text, lambda v=value: switch(v), kind="chip", h=34, px=11.5)
             tabs[value].pack(side="left", padx=(0, S(8)))
@@ -4449,10 +4825,12 @@ class Zono:
                 start.set_enabled(True)
                 clear.set_enabled(True)
 
-        def commit(entries, source, preserve=False):
+        def commit(entries, source, preserve=False, guide=""):
             if not window.winfo_exists():
                 return
             new_state = {"revision": uuid4().hex, "library": entries, "source": source}
+            if guide:
+                new_state["epg_url"] = guide
             if preserve:
                 new_state.update(favorites=self.favorites, progress=self.progress)
 
@@ -4463,6 +4841,9 @@ class Zono:
                 self.progress = new_state.get("progress", {})
                 self.hero_art.clear()
                 self.guide_cache.clear()
+                self.epg, self.epg_loading = None, False
+                self.epg_generation += 1
+                self.load_epg(force=True)
                 self.stop_playback()
                 window.close()
                 self.select("home")
@@ -4481,26 +4862,37 @@ class Zono:
             clear.set_enabled(False)
             status.configure(text=T("Bibliotheek laden… dit kan bij grote providers even duren."))
 
+            typed_guide = guide_link.get().strip()
+            if typed_guide and source is None:
+                try:
+                    data.check_url(typed_guide)
+                except ValueError as error:
+                    fail(error)
+                    return
+
             def load():
                 if source is not None:
                     if not all(source.values()):
                         raise ValueError(T("Vul alle Xtream-velden in."))
-                    return data.catalog(source)
+                    return data.catalog(source), ""
                 if local:
                     with Path(local).open("rb") as handle:
                         raw = handle.read(data.SOURCE_LIMIT + 1)
                     if len(raw) > data.SOURCE_LIMIT:
                         raise ValueError(T("Dit M3U-bestand is groter dan 256 MiB."))
-                    return data.parse_m3u(raw.decode("utf-8-sig", errors="replace"))
-                if not remote:
-                    raise ValueError(T("Vul een M3U-link in of kies een bestand."))
-                return data.parse_m3u(data.fetch(remote))
+                    text = raw.decode("utf-8-sig", errors="replace")
+                else:
+                    if not remote:
+                        raise ValueError(T("Vul een M3U-link in of kies een bestand."))
+                    text = data.fetch(remote)
+                return data.parse_m3u(text), typed_guide or epg.m3u_guide_url(text)
 
-            def loaded(entries):
+            def loaded(result):
+                entries, guide = result
                 if not entries:
                     fail(ValueError(T("De bron bevat geen herkenbare titels.")))
                 else:
-                    commit(entries, source, bool(source and source == self.source))
+                    commit(entries, source, bool(source and source == self.source), guide)
             self.run(load, loaded, fail)
 
         def erase():
@@ -6023,6 +6415,72 @@ class Zono:
                     note["text"] = T("Dit bestand kon niet als ondertitel worden geladen.")
                     fill(99)
 
+            online = {"results": None, "status": "", "busy": False}
+
+            def online_part():
+                """Search OpenSubtitles for the title that is playing (when a key is set)."""
+                key = str(self.preferences.get("opensubtitles_key") or "").strip()
+                label(body, T("ONLINE ZOEKEN"), 8, DIM, SIDE, True).pack(anchor="w", pady=(S(18), S(4)))
+                if not key:
+                    label(body, T("Zet een gratis OpenSubtitles-sleutel bij Instellingen om hier ondertitels te zoeken."),
+                          9, MUTED, SIDE, wraplength=S(300), justify="left").pack(anchor="w")
+                    return
+                Pill(body, T("Zoeken op OpenSubtitles"), online_search, kind="ghost", icon="search", h=36,
+                     padx=12).pack(anchor="w")
+                if online["status"]:
+                    label(body, online["status"], 9, MUTED, SIDE, wraplength=S(300), justify="left").pack(
+                        anchor="w", pady=(S(6), 0))
+                for result in online["results"] or []:
+                    line = tk.Frame(body, bg=SIDE, padx=S(10), pady=S(7), cursor="hand2")
+                    line.pack(fill="x", pady=1)
+                    label(line, result["language"].upper(), 8, ACCENT_SOFT, SIDE, True, width=3).pack(side="left")
+                    label(line, elide(result["name"] or T("Ondertitels"), 9, S(230)), 9, SOFT, SIDE).pack(side="left")
+                    ui.bind_hover(line, lambda l=line: ui.set_bg(l, "#1c1c24"), lambda l=line: ui.set_bg(l, SIDE))
+                    ui.bind_click(line, lambda r=result: online_fetch(r))
+
+            def online_search():
+                if online["busy"]:
+                    return
+                key = str(self.preferences.get("opensubtitles_key") or "").strip()
+                current = self.session["item"] if self.session else item
+                raw = str(current.get("raw_title") or current.get("title") or "")
+                season, episode = subtitles.episode_numbers(raw)
+                name = str(current.get("series") or raw) if season else raw
+                language = self.preferences.get("subtitle_language") or i18n.CODE
+                online.update(busy=True, results=None, status=T("Zoeken…"))
+                fill(99)
+
+                def found(results):
+                    online.update(busy=False, results=results,
+                                  status="" if results else T("Geen ondertitels gevonden in deze taal."))
+                    fill(99)
+                self.run(lambda: subtitles.search(key, name, language, year=tmdb.year_of(raw), season=season,
+                                                  episode=episode), found, online_failed)
+
+            def online_fetch(result):
+                if online["busy"]:
+                    return
+                key = str(self.preferences.get("opensubtitles_key") or "").strip()
+                online.update(busy=True, status=T("Downloaden…"))
+                fill(99)
+
+                def loaded(path):
+                    online.update(busy=False, status="")
+                    engine = self.engine
+                    if engine and engine.add_subtitle(str(path)):
+                        self.toast(T("Ondertitels geladen"), "cc")
+                        body.after(800, lambda: fill(99))
+                    else:
+                        online_failed(ValueError(T("Dit bestand kon niet als ondertitel worden geladen.")))
+                self.run(lambda: subtitles.download(key, result, data.STATE.parent / "subtitles"), loaded, online_failed)
+
+            def online_failed(error):
+                limit = isinstance(error, subtitles.LimitReached)
+                online.update(busy=False, status=T("Je hebt het maximum aantal downloads voor vandaag bereikt.")
+                              if limit else T("OpenSubtitles antwoordde niet: {}").format(error_text(error)))
+                if body.winfo_exists():
+                    fill(99)
+
             def fill(attempt=0):
                 if not body.winfo_exists():
                     return
@@ -6060,6 +6518,7 @@ class Zono:
                     label(body, T("Heb je een .srt-bestand voor deze film of aflevering? Laad het hier."), 9, MUTED, SIDE,
                           wraplength=S(300), justify="left").pack(anchor="w", pady=(0, S(8)))
                     Pill(body, T("Ondertitelbestand openen"), load_file, kind="ghost", icon="cc", h=36, padx=12).pack(anchor="w")
+                    online_part()
                 scroller.yview_moveto(0) if attempt == 0 else None
                 if not found and waiting:
                     body.after(1000, lambda: fill(attempt + 1))
@@ -6278,7 +6737,7 @@ class Zono:
             Pill(right, "", lambda: self.open_multiview(item), icon="grid", **bare).pack(side="right", padx=(S(6), 0))
         if live and item.get("archive") and item.get("sid") and self.source:
             Pill(right, "", toggle_replay, icon="refresh", **bare).pack(side="right", padx=(S(6), 0))
-        if live and item.get("sid") and self.source:
+        if live and self.has_guide(item):
             Pill(right, "", toggle_guide, icon="guide", **bare).pack(side="right", padx=(S(6), 0))
 
         def speed_menu():
@@ -6512,7 +6971,7 @@ class Zono:
                 nudge_volume(5)
             elif name == "down":
                 nudge_volume(-5)
-            elif name == "g" and live and item.get("sid") and self.source:
+            elif name == "g" and live and self.has_guide(item):
                 toggle_guide()
             elif name == "s":
                 toggle_tracks()
