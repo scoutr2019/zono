@@ -87,7 +87,9 @@ The app is packaged as compiled Python (`.pyc`) inside the executable rather tha
 Attach **two files** to a *published* (not draft) GitHub release whose tag is the version, e.g. `v2.3.0`:
 
 - `Zono.exe`: installed Zono copies download this file to update themselves (checked against the SHA-256 GitHub publishes for it);
-- `Zono.zip`: the same `Zono.exe` in a ZIP, used by the download buttons on zono.be (browsers block a bare unsigned `.exe` more often).
+- `Zono-Setup.zip`: the installer `Zono-Setup.exe` in a ZIP, used by the download buttons on zono.be (browsers block a bare unsigned `.exe` more often).
+
+Build the installer with NSIS (free): `python tools/build_installer.py dist/Zono.exe` → `Zono-Setup.exe`. It installs per user in `%LOCALAPPDATA%\Zono` (no administrator rights), adds "Zono" to the Start menu and desktop and to Settings › Apps with an uninstaller that asks whether to keep the user's data.
 
 Write the release text with bullet lines per language; Zono's update panel and the "What's new" block on zono.be show the bullets in the user's language:
 

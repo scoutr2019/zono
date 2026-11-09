@@ -1,5 +1,9 @@
 # Wijzigingen
 
+## 2.3.3
+- Installer `Zono-Setup.exe` (NSIS): installeert per gebruiker zonder beheerdersrechten, snelkoppelingen "Zono" in Startmenu en op het bureaublad, vermelding in Instellingen › Apps met verwijderknop (vraagt of je gegevens bewaard blijven). In vier talen.
+- De updater houdt het versienummer in Instellingen › Apps bij.
+
 ## 2.3.2
 - Een melding in de app als er een update klaarstaat, met wat er nieuw is (uit de releasetekst, in de taal van de app). Na de update: "Bijgewerkt naar Zono …" met de nieuwigheden.
 - Zono installeert zichzelf bij de eerste start in %LOCALAPPDATA%\\Zono, met een snelkoppeling "Zono" in het Startmenu en op het bureaublad.

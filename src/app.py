@@ -40,7 +40,7 @@ import netfix
 import updater
 from i18n import T
 
-VERSION = "2.3.2"
+VERSION = "2.3.3"
 TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
         "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False

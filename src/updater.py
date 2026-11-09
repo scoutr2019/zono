@@ -142,6 +142,7 @@ def download(info, progress=None, cancel=None):
         raise
     write_state(installed=info["version"], downloaded=info["version"], notes=info.get("notes", ""),
                 notes_version=info["version"])
+    set_listed_version(info["version"])
     return INSTALLED
 
 
@@ -170,6 +171,17 @@ def adopt(launcher, version):
     replace_installed(part)
     write_state(installed=version)
     return INSTALLED
+
+
+def set_listed_version(version):
+    """Keep the version in Settings > Apps right when the installer put Zono there."""
+    try:
+        import winreg
+        key = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Zono"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE) as handle:
+            winreg.SetValueEx(handle, "DisplayVersion", 0, winreg.REG_SZ, str(version))
+    except (ImportError, OSError):
+        pass  # not installed with the installer, or not on Windows
 
 
 def installed_version():
