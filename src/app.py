@@ -37,9 +37,10 @@ from ui import (BG, SIDE, PANEL, RAISED, LINE, TEXT, SOFT, MUTED, DIM, ACCENT, A
                 Pill, Slider, Switch, S, label, elide)
 import i18n
 import netfix
+import updater
 from i18n import T
 
-VERSION = "2.2.2"
+VERSION = "2.3.0"
 TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
         "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False
@@ -381,6 +382,9 @@ class Zono:
         root.bind("<Map>", self.root_state_changed, add="+")
         root.after(50, self.poll)
         root.after(5000, self.recording_tick)
+        self.update_info, self.update_state = None, "idle"
+        root.after(12000, lambda: self.check_update(quiet=True))
+        root.after(4000, self.after_update)
         everyone = profiles["profiles"]
         last = next((p for p in everyone if p["id"] == profiles.get("last")), everyone[0])
         if len(everyone) == 1 and not last.get("pin"):
@@ -976,6 +980,8 @@ class Zono:
 
         bottom = tk.Frame(side, bg=SIDE)
         bottom.pack(side="bottom", fill="x", pady=(0, S(14)))
+        self.update_slot = tk.Frame(bottom, bg=SIDE)  # "Update klaar · Herstarten" appears here
+        self.update_slot.pack(fill="x")
         separator(bottom)
         item(bottom, "source", "wifi", T("Provider koppelen"), self.configure_source)
         item(bottom, "settings", "gear")
@@ -2540,6 +2546,97 @@ class Zono:
         self.genre_cache[item["id"]] = list(genres)
         if not self.genre_save_job:
             self.genre_save_job = self.root.after(3000, self.save_genres)
+
+    # ------------------------------------------------------------ automatic updates
+
+    def check_update(self, quiet=False):
+        """Ask GitHub for a newer Zono, download it in the background and offer a restart."""
+        if updater.running_folder() is None and not os.environ.get("ZONO_TEST_UPDATER"):
+            return  # running from source (developers): nothing to update
+        if quiet and not self.preferences.get("auto_update", True):
+            return
+        if self.update_state in ("checking", "downloading", "ready"):
+            if self.update_state == "ready" and not quiet:
+                self.toast(T("Update {} staat klaar · klik op Herstarten").format(self.update_info["version"]), "refresh")
+            return
+        self.update_state = "checking"
+        self.refresh_update_status()
+
+        def work():
+            info = updater.latest()
+            if not info or not updater.newer(info["version"], VERSION):
+                return info, False
+            if updater.installed_version() != info["version"]:
+                updater.download(info)
+            return info, True
+
+        def done(result):
+            info, ready = result
+            self.update_info = info
+            self.update_state = "ready" if ready else "current"
+            self.refresh_update_status()
+            if ready:
+                self.show_update_ready()
+            elif not quiet:
+                self.toast(T("Je hebt de nieuwste versie ({})").format(VERSION))
+
+        def failed(error):
+            self.update_state = "failed"
+            self.refresh_update_status(error)
+            if not quiet:
+                self.toast(T("Zoeken naar updates lukte niet: {}").format(error_text(error)), "close")
+            else:
+                data.log_note(f"Update zoeken lukte niet: {type(error).__name__}: {error}")
+        self.run(work, done, failed)
+
+    def show_update_ready(self):
+        slot = getattr(self, "update_slot", None)
+        if slot is None or not slot.winfo_exists():
+            return
+        for child in slot.winfo_children():
+            child.destroy()
+        Pill(slot, T("Update {} · Herstarten").format(self.update_info["version"]), self.restart_for_update,
+             kind="primary", icon="refresh", h=38, px=11.5, width=SIDEBAR_W - 32).pack(anchor="w", padx=S(16),
+                                                                                     pady=(S(6), 0))
+        self.toast(T("Zono {} staat klaar · klik op Herstarten wanneer het jou past").format(self.update_info["version"]),
+                   "refresh")
+
+    def restart_for_update(self):
+        if self.recorders or self.download_jobs:
+            self.toast(T("Even geduld: er loopt nog een opname of download"), "close")
+            return
+        global RESTART_EXE
+        RESTART_EXE = True
+        self.toast(T("Zono wordt bijgewerkt…"), "refresh")
+        self.root.after(500, self.close)
+
+    def after_update(self):
+        """First start of a new version: shortcuts to the installed Zono and old versions cleaned up."""
+        folder = updater.running_folder()
+        if folder is None or updater.read_state().get("settled") == VERSION:
+            return
+        updated = os.environ.get("ZONO_UPDATED") == "1"
+
+        def work():
+            updater.make_shortcuts()
+            return updater.cleanup(folder)
+
+        def done(_):
+            updater.write_state(settled=VERSION)
+            if updated:
+                self.toast(T("Bijgewerkt naar Zono {}").format(VERSION))
+        self.run(work, done, lambda _: None)
+
+    def refresh_update_status(self, error=None):
+        holder = getattr(self, "update_status", None)
+        if holder is None or not holder.winfo_exists():
+            return
+        state = self.update_state
+        text = {"checking": T("Zoeken naar updates…"),
+                "ready": T("Update {} staat klaar").format(self.update_info["version"]) if self.update_info else "",
+                "current": T("Je hebt de nieuwste versie ({})").format(VERSION),
+                "failed": T("Zoeken naar updates lukte niet: {}").format(error_text(error)) if error else ""}.get(state, "")
+        holder.configure(text=text or T("Versie {}").format(VERSION))
 
     # ------------------------------------------------------------ pictures when the provider's own links fail
 
@@ -4141,6 +4238,22 @@ class Zono:
             Pill(buttons, T("Gratis sleutel aanvragen"), lambda: webbrowser.open("https://www.themoviedb.org/settings/api"),
                  kind="quiet", icon="next", h=38, padx=14).pack(side="left", padx=S(10))
             result.pack(side="left", padx=S(8))
+
+        updates = self.panel(area, T("Updates"))
+        self.switch_row(updates, T("Automatisch bijwerken"),
+                        T("Zono zoekt bij het starten naar een nieuwe versie, haalt die op de achtergrond binnen en vraagt "
+                          "dan om te herstarten. Je hoeft niets te verwijderen of opnieuw te installeren."),
+                        "auto_update", True)
+        row = tk.Frame(updates, bg=PANEL)
+        row.pack(anchor="w", fill="x", pady=(S(16), 0))
+        Pill(row, T("Nu zoeken naar updates"), lambda: self.check_update(quiet=False), kind="ghost", icon="refresh",
+             h=40, padx=16).pack(side="left")
+        self.update_status = label(row, "", 10, MUTED, PANEL)
+        self.update_status.pack(side="left", padx=S(14))
+        self.refresh_update_status()
+        if self.update_state == "ready":
+            Pill(row, T("Herstarten"), self.restart_for_update, kind="primary", icon="refresh", h=40,
+                 padx=16).pack(side="left")
 
         storage = self.panel(area, T("Opslag en hulp"))
         buttons = tk.Frame(storage, bg=PANEL)
@@ -6791,6 +6904,7 @@ def show_existing_window(pids):
 
 
 RESTART = False
+RESTART_EXE = False
 
 
 def claim_single_instance():
@@ -6853,6 +6967,14 @@ def splash(root):
 
 
 def main():
+    # An old Zono.exe (a shortcut or download from before) while a newer one is installed: start that one instead.
+    if updater.running_folder() is not None and os.environ.get("ZONO_UPDATED") != "1" \
+            and updater.newer(updater.installed_version(), VERSION):
+        try:
+            updater.start_installed()
+            return
+        except OSError:
+            pass
     mutex = claim_single_instance()
     if not mutex:
         return
@@ -6885,7 +7007,13 @@ def main():
     cover.lift()
     root.after(250, cover.destroy)
     root.mainloop()
-    if RESTART:  # a new language: start a fresh Zono once this one has let go of the single-instance lock
+    if RESTART_EXE:  # an update: the newly installed Zono.exe takes over
+        try:
+            ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(mutex))
+            updater.start_installed()
+        except OSError:
+            pass
+    elif RESTART:  # a new language: start a fresh Zono once this one has let go of the single-instance lock
         try:
             ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(mutex))
             subprocess.Popen([sys.executable, "-E", "-s", "-B", str(Path(__file__).resolve())],

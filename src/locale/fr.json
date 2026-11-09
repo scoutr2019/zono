@@ -552,5 +552,21 @@
  "Iran / Perzisch": "Iran / persan",
  "China": "Chine",
  "Filipijnen": "Philippines",
- "Afspelen||instellingen": "Lecture"
+ "Afspelen||instellingen": "Lecture",
+ "Zono wordt bijgewerkt…": "Mise à jour de Zono…",
+ "Updates": "Mises à jour",
+ "Automatisch bijwerken": "Mettre à jour automatiquement",
+ "Zono zoekt bij het starten naar een nieuwe versie, haalt die op de achtergrond binnen en vraagt dan om te herstarten. Je hoeft niets te verwijderen of opnieuw te installeren.": "Au démarrage, Zono recherche une nouvelle version, la télécharge en arrière-plan puis vous propose de redémarrer. Rien à désinstaller ni à réinstaller.",
+ "Even geduld: er loopt nog een opname of download": "Un instant : un enregistrement ou un téléchargement est en cours",
+ "Zono {} staat klaar · klik op Herstarten wanneer het jou past": "Zono {} est prêt · cliquez sur Redémarrer quand vous voulez",
+ "Zoeken naar updates…": "Recherche de mises à jour…",
+ "Nu zoeken naar updates": "Rechercher des mises à jour",
+ "Herstarten": "Redémarrer",
+ "Update {} staat klaar · klik op Herstarten": "La mise à jour {} est prête · cliquez sur Redémarrer",
+ "Zoeken naar updates lukte niet: {}": "Échec de la recherche de mises à jour : {}",
+ "Update {} · Herstarten": "Mise à jour {} · Redémarrer",
+ "Bijgewerkt naar Zono {}": "Mis à jour vers Zono {}",
+ "Je hebt de nieuwste versie ({})": "Vous avez la dernière version ({})",
+ "Versie {}": "Version {}",
+ "Update {} staat klaar": "La mise à jour {} est prête"
 }

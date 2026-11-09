@@ -82,6 +82,15 @@ python tools/build_exe.py --base Zono-2_2_0.exe --old-version 2.2.0 --version 2.
 
 The app is packaged as compiled Python (`.pyc`) inside the executable rather than plain source files.
 
+### Publishing a release (auto-update)
+
+Attach **two files** to a *published* (not draft) GitHub release whose tag is the version, e.g. `v2.3.0`:
+
+- `Zono.exe`: installed Zono copies download this file to update themselves (checked against the SHA-256 GitHub publishes for it);
+- `Zono.zip`: the same `Zono.exe` in a ZIP, used by the download buttons on zono.be (browsers block a bare unsigned `.exe` more often).
+
+Zono checks `https://api.github.com/repos/scoutr2019/zono/releases/latest` at startup, so publishing the release is all it takes. Versions 2.2.2 and older have no updater: those users download 2.3.0 once.
+
 Build output is written to `dist/`. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the app's architecture. Building successfully does not resolve the third-party licensing requirements described below.
 
 ## Translation

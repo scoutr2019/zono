@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 2.3.0
+- Automatische updates: Zono zoekt bij het starten naar een nieuwe release op GitHub, haalt `Zono.exe` op de achtergrond binnen (gecontroleerd met de SHA-256 van GitHub) en vraagt om te herstarten. Niets verwijderen of opnieuw installeren.
+- Zono komt in het Startmenu; oude uitgepakte versies worden opgeruimd.
+- Instellingen › Updates: aan/uit en "Nu zoeken naar updates".
+
 ## 2.2.2
 - Fout opgelost: Escape in volledig scherm, nadat de bedieningsbalk vanzelf verdwenen was, gaf "window isn't packed". Met een test die precies dat nadoet.
 

@@ -552,5 +552,21 @@
  "Iran / Perzisch": "Iran / Persian",
  "China": "China",
  "Filipijnen": "Philippines",
- "Afspelen||instellingen": "Playback"
+ "Afspelen||instellingen": "Playback",
+ "Zono wordt bijgewerkt…": "Updating Zono…",
+ "Updates": "Updates",
+ "Automatisch bijwerken": "Update automatically",
+ "Zono zoekt bij het starten naar een nieuwe versie, haalt die op de achtergrond binnen en vraagt dan om te herstarten. Je hoeft niets te verwijderen of opnieuw te installeren.": "At startup Zono looks for a new version, downloads it in the background and then asks you to restart. You don't have to uninstall or reinstall anything.",
+ "Even geduld: er loopt nog een opname of download": "Just a moment: a recording or download is still running",
+ "Zono {} staat klaar · klik op Herstarten wanneer het jou past": "Zono {} is ready · click Restart whenever it suits you",
+ "Zoeken naar updates…": "Checking for updates…",
+ "Nu zoeken naar updates": "Check for updates now",
+ "Herstarten": "Restart",
+ "Update {} staat klaar · klik op Herstarten": "Update {} is ready · click Restart",
+ "Zoeken naar updates lukte niet: {}": "Checking for updates failed: {}",
+ "Update {} · Herstarten": "Update {} · Restart",
+ "Bijgewerkt naar Zono {}": "Updated to Zono {}",
+ "Je hebt de nieuwste versie ({})": "You have the latest version ({})",
+ "Versie {}": "Version {}",
+ "Update {} staat klaar": "Update {} is ready"
 }
