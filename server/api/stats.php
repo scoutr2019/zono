@@ -5,13 +5,17 @@ require __DIR__ . '/lib.php';
 session_start();
 header('Cache-Control: no-store');
 header('X-Robots-Tag: noindex');
+$wrong = false;
 if (isset($_POST['password'])) {
-    if (STATS_PASSWORD !== 'VERANDER-DIT-WACHTWOORD' && hash_equals(STATS_PASSWORD, (string)$_POST['password'])) {
+    // spaces before or after (from copying) do not count
+    if (STATS_PASSWORD !== 'VERANDER-DIT-WACHTWOORD' && hash_equals(trim(STATS_PASSWORD), trim((string)$_POST['password']))) {
         session_regenerate_id(true);
         $_SESSION['zono'] = true;
-    } else {
-        sleep(2);
+        header('Location: stats.php');  // a fresh page, so "reload" does not post the password again
+        exit;
     }
+    sleep(1);
+    $wrong = true;
 }
 if (isset($_GET['logout'])) { $_SESSION = []; session_destroy(); header('Location: stats.php'); exit; }
 function h($text) { return htmlspecialchars((string)$text, ENT_QUOTES, 'UTF-8'); }
@@ -39,7 +43,8 @@ details{border-bottom:1px solid var(--line);padding:8px 0}summary{cursor:pointer
 <?php if (empty($_SESSION['zono'])): ?>
 <form method="post"><h2 style="margin:0">Zono statistieken</h2>
 <?php if (STATS_PASSWORD === 'VERANDER-DIT-WACHTWOORD'): ?><p style="color:#c0392b">Stel eerst een wachtwoord in, in config.php.</p><?php endif; ?>
-<input type="password" name="password" placeholder="Wachtwoord" autofocus><button>Inloggen</button></form>
+<?php if ($wrong): ?><p style="color:#c0392b;margin:12px 0 0">Dit wachtwoord klopt niet. Het moet precies hetzelfde zijn als bij <code>STATS_PASSWORD</code> in <code>api/config.php</code> (hoofdletters tellen mee).</p><?php endif; ?>
+<input type="password" name="password" placeholder="Wachtwoord" autofocus autocomplete="current-password"><button>Inloggen</button></form>
 <?php else:
 $pdo = db();
 $today = gmdate('Y-m-d');
