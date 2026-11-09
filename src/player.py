@@ -13,6 +13,22 @@ class _Track(c.Structure):
 _Track._fields_ = [("id", c.c_int), ("name", c.c_char_p), ("next", c.POINTER(_Track))]
 
 
+def name_audio(dll, instance):
+    """Show "Zono" in the Windows volume mixer instead of "VLC media player (LibVLC 3.0.x)".
+
+    VLC names its audio session after its user agent. Providers still see VLC's own web user agent, because some
+    of them only answer VLC."""
+    try:
+        version = c.c_char_p
+        dll.libvlc_get_version.restype, dll.libvlc_get_version.argtypes = version, []
+        number = (dll.libvlc_get_version() or b"3.0").split(b" ")[0]
+        function = dll.libvlc_set_user_agent
+        function.restype, function.argtypes = None, [c.c_void_p, c.c_char_p, c.c_char_p]
+        function(instance, b"Zono", b"VLC/" + number + b" LibVLC/" + number)
+    except (AttributeError, OSError):
+        pass
+
+
 class Player:
     def __init__(self, hwnd):
         folder = Path(__file__).with_name("video")
@@ -59,6 +75,7 @@ class Player:
             self.instance = self.new(len(arguments), arguments)
             if not self.instance:
                 raise ValueError(T("VLC kon zijn videomotor niet starten."))
+            name_audio(self.dll, self.instance)
             self.player = self.media_player_new(self.instance)
             if not self.player:
                 raise ValueError(T("VLC kon de speler niet openen."))
@@ -168,6 +185,8 @@ class Headless:
             self.fn[name] = function
         arguments = (s * 3)(b"--no-video-title-show", b"--no-osd", b"--no-stats")
         self.instance = self.fn["new"](len(arguments), arguments)
+        if self.instance:
+            name_audio(dll, self.instance)
         if not self.instance:
             raise ValueError(T("VLC kon niet starten."))
         media = self.fn["media_new_location"](self.instance, url.encode("utf-8"))

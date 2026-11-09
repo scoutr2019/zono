@@ -40,7 +40,7 @@ import netfix
 import updater
 from i18n import T
 
-VERSION = "2.3.0"
+VERSION = "2.3.1"
 TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
         "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False
@@ -217,6 +217,14 @@ def first_url(value):
     if isinstance(value, (list, tuple)):
         value = next((v for v in value if is_url(v)), None)
     return value if is_url(value) else None
+
+
+_UHD = re.compile(r"(?<![A-Z0-9])(4K|8K|16K|UHD|2160P?)(?![A-Z0-9])|ᵁᴴᴰ", re.I)
+
+
+def is_uhd(item):
+    """A 4K (or better) channel, from the provider's own name or group: "4K | VRT 1", "NPO 1 UHD", "NPO 2ᵁᴴᴰ"."""
+    return bool(_UHD.search(f"{item.get('raw_title') or item.get('title', '')} {item.get('group', '')}"))
 
 
 def score(item):
@@ -870,6 +878,15 @@ class Zono:
                 if title != raw:
                     item = dict(item, title=title, raw_title=raw, cc=countries.detect(item))
             result.append(item)
+        if self.preferences.get("uhd_first", True):
+            # 4K versions of a channel first: with many providers the plain versions often do not play
+            chosen = self.preferred_countries()
+
+            def rank(item):
+                code = item.get("cc") or countries.detect(item)
+                return (chosen.index(code) if code in chosen else len(chosen), 0 if is_uhd(item) else 1)
+            live = sorted((i for i in result if i.get("kind") == "live"), key=rank)
+            result = live + [i for i in result if i.get("kind") != "live"]
         shown = {i["id"]: i for i in result}
         for key, favorite in list(getattr(self, "favorites", {}).items()):
             if key in shown and favorite.get("title") != shown[key]["title"]:
@@ -4160,6 +4177,9 @@ class Zono:
                         "Wordt automatisch gewist."), 9, MUTED, PANEL).pack(anchor="w", pady=(S(6), 0))
         self.switch_row(playback, T("Laatste zender automatisch afspelen"), T("Live TV start bij het openen met de zender die je het laatst keek."),
                         "autoplay_live")
+        self.switch_row(playback, T("4K-zenders eerst"),
+                        T("In Live TV en de gids staan de 4K-versies van je zenders bovenaan."), "uhd_first",
+                        after=lambda _: self.set_library(self.raw_library))
         self.switch_row(playback, T("Beeld-in-beeld als je Zono minimaliseert"),
                         T("Het beeld speelt verder in een klein venster dat bovenop je andere programma's blijft."), "auto_pip")
 

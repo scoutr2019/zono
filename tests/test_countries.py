@@ -63,3 +63,13 @@ class Detect(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FourK(unittest.TestCase):
+    def test_detects_4k_channels(self):
+        import app
+        for title in ("4K | VRT 1 HD", "NPO 1 UHD", "NPO 2ᵁᴴᴰ", "BE: Eén 2160p"):
+            self.assertTrue(app.is_uhd({"raw_title": title}), title)
+        self.assertTrue(app.is_uhd({"title": "VRT 1", "group": "BE | 4K"}))
+        for title in ("VRT 1 HD", "NPO 1 FHD", "Canvas", "K4 Kids"):
+            self.assertFalse(app.is_uhd({"title": title}), title)

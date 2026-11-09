@@ -1,5 +1,9 @@
 # Wijzigingen
 
+## 2.3.1
+- In het volumemixer van Windows heet het geluid nu "Zono" in plaats van "VLC media player (LibVLC …)".
+- 4K-zenders staan eerst in Live TV en de gids (uit te zetten bij Instellingen › Afspelen).
+
 ## 2.3.0
 - Automatische updates: Zono zoekt bij het starten naar een nieuwe release op GitHub, haalt `Zono.exe` op de achtergrond binnen (gecontroleerd met de SHA-256 van GitHub) en vraagt om te herstarten. Niets verwijderen of opnieuw installeren.
 - Zono komt in het Startmenu; oude uitgepakte versies worden opgeruimd.
