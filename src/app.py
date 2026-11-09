@@ -40,7 +40,7 @@ import netfix
 import updater
 from i18n import T
 
-VERSION = "2.3.1"
+VERSION = "2.3.2"
 TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
         "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False
@@ -2612,11 +2612,56 @@ class Zono:
             return
         for child in slot.winfo_children():
             child.destroy()
-        Pill(slot, T("Update {} · Herstarten").format(self.update_info["version"]), self.restart_for_update,
+        Pill(slot, T("Update {} · Herstarten").format(self.update_info["version"]), self.update_sheet,
              kind="primary", icon="refresh", h=38, px=11.5, width=SIDEBAR_W - 32).pack(anchor="w", padx=S(16),
                                                                                      pady=(S(6), 0))
-        self.toast(T("Zono {} staat klaar · klik op Herstarten wanneer het jou past").format(self.update_info["version"]),
-                   "refresh")
+        if self.session or self.sheet_close or self.player_view is not None:
+            # never in the middle of watching or of another panel: the button in the sidebar waits
+            self.toast(T("Zono {} staat klaar · klik op Herstarten wanneer het jou past").format(
+                self.update_info["version"]), "refresh")
+        else:
+            self.update_sheet()
+
+    def notes_panel(self, title, subtitle, notes, buttons):
+        """In-app panel with what is new: title, a short line, the bullets of the release and buttons."""
+        card = self.sheet(560, 0)
+        body = tk.Frame(card, bg=SIDE, padx=S(34), pady=S(30))
+        body.pack(fill="both", expand=True)
+        badge = tk.Frame(body, bg=SIDE)
+        badge.pack(anchor="w")
+        Pill(badge, "", None, kind="primary", icon="refresh", h=44).pack(side="left")
+        label(body, title, 20, TEXT, SIDE, True, wraplength=S(470), justify="left").pack(anchor="w", pady=(S(16), S(4)))
+        label(body, subtitle, 10, MUTED, SIDE, wraplength=S(480), justify="left").pack(anchor="w")
+        if notes:
+            box = tk.Frame(body, bg=PANEL, padx=S(20), pady=S(16))
+            box.pack(fill="x", pady=(S(18), 0))
+            label(box, T("WAT IS ER NIEUW"), 8, ACCENT_SOFT, PANEL, True).pack(anchor="w", pady=(0, S(8)))
+            for note in notes:
+                line = tk.Frame(box, bg=PANEL)
+                line.pack(fill="x", pady=S(3))
+                label(line, "✓", 10, ACCENT_SOFT, PANEL, True).pack(side="left", anchor="n")
+                label(line, note, 10, SOFT, PANEL, wraplength=S(430), justify="left").pack(side="left", padx=(S(10), 0))
+        row = tk.Frame(body, bg=SIDE)
+        row.pack(anchor="w", pady=(S(22), 0))
+        for text, command, kind, *icon in buttons:
+            Pill(row, text, command, kind=kind, icon=icon[0] if icon else None,
+                 h=42, padx=20).pack(side="left", padx=(0, S(10)))
+        return card
+
+    def update_sheet(self):
+        """Update ready: what it brings, restart now or later."""
+        info = self.update_info or {}
+        notes = updater.release_notes(info.get("notes", ""), i18n.CODE)
+        card = None
+
+        def later():
+            if card is not None:
+                card.close()
+        card = self.notes_panel(T("Zono {} staat klaar").format(info.get("version", "")),
+                                T("De nieuwe versie is al gedownload. Herstarten duurt een paar seconden; "
+                                  "je instellingen, favorieten en voortgang blijven bewaard."), notes,
+                                [(T("Nu herstarten"), self.restart_for_update, "primary", "refresh"),
+                                 (T("Later"), later, "ghost")])
 
     def restart_for_update(self):
         if self.recorders or self.download_jobs:
@@ -2635,13 +2680,31 @@ class Zono:
         updated = os.environ.get("ZONO_UPDATED") == "1"
 
         def work():
-            updater.make_shortcuts()
+            first = not updater.INSTALLED.is_file()
+            if LAUNCHER is not None and not updater.newer(updater.installed_version(), VERSION) \
+                    and updater.installed_version() != VERSION:
+                updater.adopt(LAUNCHER, VERSION)  # first start: Zono installs itself (Start menu "Zono")
+            updater.make_shortcuts(desktop=first and updater.INSTALLED.is_file())
             return updater.cleanup(folder)
 
         def done(_):
+            state = updater.read_state()
             updater.write_state(settled=VERSION)
-            if updated:
+            if not updated:
+                return
+            notes = updater.release_notes(state.get("notes", ""), i18n.CODE) \
+                if state.get("notes_version") == VERSION else []
+            if self.sheet_close or self.session:
                 self.toast(T("Bijgewerkt naar Zono {}").format(VERSION))
+                return
+            card = None
+
+            def close():
+                if card is not None:
+                    card.close()
+            card = self.notes_panel(T("Bijgewerkt naar Zono {}").format(VERSION),
+                                    T("Dit is er nieuw of opgelost in deze versie."), notes,
+                                    [(T("Verder kijken"), close, "primary", "check")])
         self.run(work, done, lambda _: None)
 
     def refresh_update_status(self, error=None):
@@ -6870,6 +6933,53 @@ class _ProcessEntry(ctypes.Structure):
                 ("pcPriClassBase", ctypes.c_long), ("dwFlags", ctypes.c_uint32), ("szExeFile", ctypes.c_wchar * 260)]
 
 
+def launcher_path():
+    """The Zono.exe that started this copy (the parent process), so Zono can install itself on the first start.
+    None when it cannot be found (the launcher may already have closed)."""
+    try:
+        kernel = ctypes.windll.kernel32
+        kernel.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+        kernel.OpenProcess.restype = ctypes.c_void_p
+        snapshot = kernel.CreateToolhelp32Snapshot(0x2, 0)
+        if not snapshot or snapshot == ctypes.c_void_p(-1).value:
+            return None
+        parent = None
+        try:
+            entry = _ProcessEntry()
+            entry.dwSize = ctypes.sizeof(_ProcessEntry)
+            more = kernel.Process32FirstW(ctypes.c_void_p(snapshot), ctypes.byref(entry))
+            while more:
+                if entry.th32ProcessID == os.getpid():
+                    parent = entry.th32ParentProcessID
+                    break
+                more = kernel.Process32NextW(ctypes.c_void_p(snapshot), ctypes.byref(entry))
+        finally:
+            kernel.CloseHandle(ctypes.c_void_p(snapshot))
+        if not parent:
+            return None
+        handle = kernel.OpenProcess(0x1000, False, parent)
+        if not handle:
+            return None
+        try:
+            buffer = ctypes.create_unicode_buffer(1024)
+            size = ctypes.c_uint32(1024)
+            if not kernel.QueryFullProcessImageNameW(ctypes.c_void_p(handle), 0, buffer, ctypes.byref(size)):
+                return None
+        finally:
+            kernel.CloseHandle(ctypes.c_void_p(handle))
+        path = Path(buffer.value)
+        # our launcher: a big .exe (it carries the whole app), not Explorer, a shell or a Python runtime
+        if path.suffix.lower() != ".exe" or path.name.lower() in ("explorer.exe", "cmd.exe", "pythonw.exe",
+                                                                   "python.exe", "powershell.exe"):
+            return None
+        return path if path.is_file() and path.stat().st_size > 40_000_000 else None
+    except (AttributeError, OSError):
+        return None
+
+
+LAUNCHER = None
+
+
 def other_zono_processes():
     """Process ids of other running Zono copies (any version), found by the runtime they run from."""
     kernel = ctypes.windll.kernel32
@@ -6987,6 +7097,8 @@ def splash(root):
 
 
 def main():
+    global LAUNCHER
+    LAUNCHER = launcher_path()  # right away: the launcher may close soon after starting Zono
     # An old Zono.exe (a shortcut or download from before) while a newer one is installed: start that one instead.
     if updater.running_folder() is not None and os.environ.get("ZONO_UPDATED") != "1" \
             and updater.newer(updater.installed_version(), VERSION):

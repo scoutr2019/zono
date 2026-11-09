@@ -22,7 +22,7 @@
  "Terugkijken": "Replay",
  "Begroeting en ‘Kijk verder naar’": "Accueil et « Reprendre »",
  "Goedemorgen + wat je net keek, met één klik verder": "Bonjour + ce que vous venez de regarder, reprise en un clic",
- "Verder kijken": "Reprendre",
+ "Verder kijken": "Continuer",
  "Films en afleveringen die je nog niet uitkeek": "Films et épisodes que vous n'avez pas terminés",
  "Mijn zenders": "Mes chaînes",
  "Je favoriete zenders, met wat er nu speelt": "Vos chaînes favorites, avec ce qui passe maintenant",
@@ -570,5 +570,10 @@
  "Versie {}": "Version {}",
  "Update {} staat klaar": "La mise à jour {} est prête",
  "4K-zenders eerst": "Chaînes 4K en premier",
- "In Live TV en de gids staan de 4K-versies van je zenders bovenaan.": "La TV en direct et le guide affichent d'abord les versions 4K de vos chaînes."
+ "In Live TV en de gids staan de 4K-versies van je zenders bovenaan.": "La TV en direct et le guide affichent d'abord les versions 4K de vos chaînes.",
+ "WAT IS ER NIEUW": "NOUVEAUTÉS",
+ "Zono {} staat klaar": "Zono {} est prêt",
+ "De nieuwe versie is al gedownload. Herstarten duurt een paar seconden; je instellingen, favorieten en voortgang blijven bewaard.": "La nouvelle version est déjà téléchargée. Le redémarrage prend quelques secondes ; vos paramètres, favoris et progression sont conservés.",
+ "Nu herstarten": "Redémarrer maintenant",
+ "Dit is er nieuw of opgelost in deze versie.": "Voici les nouveautés et corrections de cette version."
 }

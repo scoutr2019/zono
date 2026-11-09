@@ -80,6 +80,26 @@ def latest(timeout=10):
             "notes": str(release.get("body") or "")[:2000]}
 
 
+def release_notes(body, language="nl"):
+    """Bullet lines of a release text for one language.
+
+    Convention (also used by zono.be): bullets ("- ...") under headings "### NL", "### FR", "### EN", "### DE".
+    Without those headings every bullet counts. Markdown marks are removed."""
+    parts, plain, current = {}, [], None
+    for line in str(body or "").splitlines():
+        head = re.match(r"^#{1,4}\s*(NL|FR|EN|DE)\b", line, re.I)
+        if head:
+            current = head.group(1).lower()
+            parts.setdefault(current, [])
+            continue
+        item = re.match(r"^\s*[-*]\s+(.+)", line)
+        if item:
+            text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", item.group(1))
+            text = re.sub(r"\*\*|__|`", "", text).strip()
+            (parts[current] if current else plain).append(text)
+    return (parts.get(language) or parts.get("nl") or plain)[:8]
+
+
 def _check_link(url):
     parts = urlsplit(url)
     if parts.scheme != "https" or parts.hostname not in ALLOWED_HOSTS:
@@ -120,7 +140,8 @@ def download(info, progress=None, cancel=None):
     except Exception:
         part.unlink(missing_ok=True)
         raise
-    write_state(installed=info["version"], downloaded=info["version"])
+    write_state(installed=info["version"], downloaded=info["version"], notes=info.get("notes", ""),
+                notes_version=info["version"])
     return INSTALLED
 
 
@@ -136,6 +157,21 @@ def replace_installed(new_file):
     os.replace(new_file, INSTALLED)
 
 
+def adopt(launcher, version):
+    """Copy the Zono.exe the user started (from Downloads, say) to the fixed place, so Start menu, updates and
+    the desktop shortcut always point at one Zono."""
+    launcher = Path(launcher)
+    if launcher.resolve() == INSTALLED.resolve():
+        write_state(installed=version)
+        return INSTALLED
+    ROOT.mkdir(parents=True, exist_ok=True)
+    part = ROOT / "Zono.exe.part"
+    shutil.copyfile(launcher, part)
+    replace_installed(part)
+    write_state(installed=version)
+    return INSTALLED
+
+
 def installed_version():
     """Version of %LOCALAPPDATA%\\Zono\\Zono.exe when it is there, else ""."""
     return read_state().get("installed", "") if INSTALLED.is_file() else ""
@@ -146,20 +182,20 @@ def start_installed():
                      env=dict(os.environ, ZONO_UPDATED="1"))
 
 
-def make_shortcuts():
-    """Start-menu shortcut "Zono" (always) and the desktop shortcut "Zono" (only when one already exists)."""
+def make_shortcuts(desktop=False):
+    """Start-menu shortcut "Zono" (always) and the desktop shortcut "Zono" (when one exists, or `desktop`)."""
     if os.name != "nt" or not INSTALLED.is_file():
         return
     script = (
         "$t=$env:ZONO_TARGET;$w=New-Object -ComObject WScript.Shell;"
         "$m=Join-Path ([Environment]::GetFolderPath('Programs')) 'Zono.lnk';"
         "$d=Join-Path ([Environment]::GetFolderPath('Desktop')) 'Zono.lnk';"
-        "foreach($p in @($m,$d)){ if($p -eq $d -and -not (Test-Path $d)){continue};"
+        "foreach($p in @($m,$d)){ if($p -eq $d -and -not (Test-Path $d) -and $env:ZONO_DESKTOP -ne '1'){continue};"
         "$s=$w.CreateShortcut($p);$s.TargetPath=$t;$s.WorkingDirectory=(Split-Path $t);"
         "$s.IconLocation=\"$t,0\";$s.Description='Zono';$s.Save() }")
     try:
         subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-                       env=dict(os.environ, ZONO_TARGET=str(INSTALLED)), creationflags=CREATE_NO_WINDOW,
+                       env=dict(os.environ, ZONO_TARGET=str(INSTALLED), ZONO_DESKTOP="1" if desktop else "0"), creationflags=CREATE_NO_WINDOW,
                        capture_output=True, timeout=30)
     except (OSError, subprocess.SubprocessError):
         pass

@@ -101,33 +101,66 @@ def swap_files(base, files):
     base[ZIP_SIZE_AT + 4:ZIP_SIZE_AT + 4 + room] = packed + b"\0" * (room - len(packed))
 
 
-def write_icons(data):
-    """Append new PNG icons (16-256 px) to the resource section and point the icon group at them."""
+def _pad4(raw):
+    return raw + b"\0" * ((-len(raw)) % 4)
+
+
+def _block(key, value=b"", text=True, children=()):
+    """One node of a Windows VS_VERSIONINFO tree: length, value length, type, key, value, children (4-byte aligned)."""
+    value_length = len(value) // 2 if text else len(value)
+    raw = _pad4(struct.pack("<HHH", 0, value_length, 1 if text else 0) + (key + "\0").encode("utf-16-le")) + value
+    for child in children:
+        raw = _pad4(raw) + child
+    return struct.pack("<H", len(raw)) + raw[2:]
+
+
+def version_info(version):
+    """VS_VERSIONINFO with Zono's name and version: Task Manager and file properties show "Zono"."""
+    numbers = [int(n) for n in (version.split(".") + ["0", "0", "0"])[:4]]
+    high, low = numbers[0] << 16 | numbers[1], numbers[2] << 16 | numbers[3]
+    fixed = struct.pack("<13I", 0xFEEF04BD, 0x00010000, high, low, high, low, 0x3F, 0, 0x00040004, 1, 0, 0, 0)
+    strings = {"CompanyName": "Zono TV", "FileDescription": "Zono", "FileVersion": version,
+               "InternalName": "Zono", "LegalCopyright": "\u00a9 2026 Zono TV", "OriginalFilename": "Zono.exe",
+               "ProductName": "Zono", "ProductVersion": version}
+    table = [_block(k, (v + "\0").encode("utf-16-le")) for k, v in strings.items()]
+    string_info = _block("StringFileInfo", children=[_block("000004b0", children=table)])
+    var_info = _block("VarFileInfo", children=[_block("Translation", struct.pack("<HH", 0, 0x04B0), text=False)])
+    return _block("VS_VERSION_INFO", fixed, text=False, children=[string_info, var_info])
+
+
+def write_resources(data, icons=False, version=None):
+    """Append new resources to the resource section and point the resource table at them:
+    PNG icons (16-256 px) from src/zono_mark.png and/or a version block with the name "Zono"."""
     import pefile
-    from PIL import Image
     pe = pefile.PE(data=bytes(data))
     section = pe.sections[-1]
     if not section.Name.startswith(b".rsrc"):
-        sys.exit("De laatste sectie van de exe is geen .rsrc: iconen niet aangepast.")
-    mark = Image.open(SRC / "zono_mark.png").convert("RGBA")
+        sys.exit("De laatste sectie van de exe is geen .rsrc: bronnen niet aangepast.")
     file_align, section_align = pe.OPTIONAL_HEADER.FileAlignment, pe.OPTIONAL_HEADER.SectionAlignment
     blob, base_raw = bytearray(), section.SizeOfRawData
     base_rva = section.VirtualAddress + base_raw
-    sizes = {2: 16, 3: 24, 4: 32, 5: 48, 6: 64, 7: 128, 8: 256}
+
+    def add(record, raw):
+        nonlocal blob
+        record.OffsetToData, record.Size = base_rva + len(blob), len(raw)
+        blob += raw + b"\0" * ((-len(raw)) % 8)
     lengths, group = {}, None
+    if icons:
+        from PIL import Image
+        mark = Image.open(SRC / "zono_mark.png").convert("RGBA")
+        sizes = {2: 16, 3: 24, 4: 32, 5: 48, 6: 64, 7: 128, 8: 256}
     for entry in pe.DIRECTORY_ENTRY_RESOURCE.entries:
-        if entry.id == 3:  # RT_ICON
+        if icons and entry.id == 3:  # RT_ICON
             for icon in entry.directory.entries:
                 png = io.BytesIO()
                 mark.resize((sizes[icon.id],) * 2, Image.LANCZOS).save(png, "PNG", optimize=True)
-                png = png.getvalue()
-                record = icon.directory.entries[0].data.struct
-                record.OffsetToData, record.Size = base_rva + len(blob), len(png)
-                lengths[icon.id] = len(png)
-                blob += png + b"\0" * ((-len(png)) % 8)
-        if entry.id == 14:  # RT_GROUP_ICON
+                lengths[icon.id] = len(png.getvalue())
+                add(icon.directory.entries[0].data.struct, png.getvalue())
+        if icons and entry.id == 14:  # RT_GROUP_ICON
             record = entry.directory.entries[0].directory.entries[0].data.struct
             group = pe.get_offset_from_rva(record.OffsetToData)
+        if version and entry.id == 16:  # RT_VERSION
+            add(entry.directory.entries[0].directory.entries[0].data.struct, version_info(version))
     blob += b"\0" * ((-len(blob)) % file_align)
     for k in range(len(lengths)):
         at = group + 6 + k * 14
@@ -167,8 +200,7 @@ def main():
     swap_files(data, app_files(args.python or sys.executable, args.readable))
     replace_once(data, args.old_version, args.version)
     replace_once(data, package_name(args.old_version), package_name(args.version))
-    if args.icons:
-        data = write_icons(data)
+    data = write_resources(data, icons=args.icons, version=args.version)
     data = checksum(data)
     out = Path(args.out) if args.out else ROOT / "dist" / f"Zono-{args.version.replace('.', '_')}.exe"
     out.parent.mkdir(parents=True, exist_ok=True)

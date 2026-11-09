@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 2.3.2
+- Een melding in de app als er een update klaarstaat, met wat er nieuw is (uit de releasetekst, in de taal van de app). Na de update: "Bijgewerkt naar Zono …" met de nieuwigheden.
+- Zono installeert zichzelf bij de eerste start in %LOCALAPPDATA%\\Zono, met een snelkoppeling "Zono" in het Startmenu en op het bureaublad.
+- Het programma heet nu "Zono" in Taakbeheer en bij Eigenschappen (versie-informatie in Zono.exe).
+
 ## 2.3.1
 - In het volumemixer van Windows heet het geluid nu "Zono" in plaats van "VLC media player (LibVLC …)".
 - 4K-zenders staan eerst in Live TV en de gids (uit te zetten bij Instellingen › Afspelen).

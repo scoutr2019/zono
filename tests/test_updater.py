@@ -119,3 +119,41 @@ class Updates(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Notes(unittest.TestCase):
+    BODY = ("**Nieuw**\n### NL\n- 4K-zenders **eerst**\n- Volumemixer toont Zono\n### EN\n- 4K channels first\n"
+            "### FR\n- Chaînes 4K en premier\n\nInstalleren: download Zono.zip")
+
+    def test_language_sections(self):
+        self.assertEqual(updater.release_notes(self.BODY, "nl"), ["4K-zenders eerst", "Volumemixer toont Zono"])
+        self.assertEqual(updater.release_notes(self.BODY, "en"), ["4K channels first"])
+        self.assertEqual(updater.release_notes(self.BODY, "de"), ["4K-zenders eerst", "Volumemixer toont Zono"])
+
+    def test_plain_bullets_and_links(self):
+        body = "Nieuw in 2.3.0\n- Automatische [updates](https://x.y)\n* Startmenu\nTekst zonder streepje"
+        self.assertEqual(updater.release_notes(body, "fr"), ["Automatische updates", "Startmenu"])
+
+
+class Adopt(unittest.TestCase):
+    def setUp(self):
+        shutil.rmtree(updater.ROOT, ignore_errors=True)
+        updater.ROOT.mkdir(parents=True)
+
+    def tearDown(self):
+        shutil.rmtree(updater.ROOT, ignore_errors=True)
+
+    def test_first_start_copies_the_launcher(self):
+        downloads = updater.ROOT.parent / "Downloads"
+        downloads.mkdir(exist_ok=True)
+        (downloads / "Zono (1).exe").write_bytes(b"MZlauncher")
+        updater.adopt(downloads / "Zono (1).exe", "2.3.2")
+        self.assertEqual(updater.INSTALLED.read_bytes(), b"MZlauncher")
+        self.assertEqual(updater.installed_version(), "2.3.2")
+        shutil.rmtree(downloads)
+
+    def test_started_from_the_installed_copy(self):
+        updater.INSTALLED.write_bytes(b"MZ")
+        updater.adopt(updater.INSTALLED, "2.3.2")
+        self.assertEqual(updater.INSTALLED.read_bytes(), b"MZ")
+        self.assertEqual(updater.installed_version(), "2.3.2")
