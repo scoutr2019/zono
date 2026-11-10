@@ -18,7 +18,7 @@ class Shelves(all: List<Item>, uhdFirst: Boolean) {
     val live: List<Item> = all.filter { it.kind == "live" }.let { if (uhdFirst) uhdFirst(it) else it }
     val movies: List<Item> = all.filter { it.kind == "movie" }
     val series: List<Item> = all.filter { it.kind == "series" }
-    val liveGroups = groupsOf(live, uhdFirst)
+    val liveGroups = groupsOf(all.filter { it.kind == "live" }, uhdFirst) // provider order, 4K groups first
     val movieGroups = groupsOf(movies)
     val seriesGroups = groupsOf(series)
     val newMovies = movies.filter { it.added > 0 }.sortedByDescending { it.added }.take(30)

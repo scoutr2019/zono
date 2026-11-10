@@ -1,0 +1,15 @@
+{
+  "id": "be.zono.tv",
+  "version": "0.1.0",
+  "vendor": "zono.be",
+  "type": "web",
+  "main": "index.html",
+  "title": "Zono",
+  "icon": "img/icon.png",
+  "largeIcon": "img/largeIcon.png",
+  "bgColor": "#0b0b0f",
+  "iconColor": "#5558f5",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "uiRevision": 2
+}
