@@ -84,7 +84,7 @@ footer{text-align:center;color:var(--muted);font-size:14px;padding:0 16px 40px}
 
   <div class="card release">
     <div><h3 data-t="download"></h3><div class="version" id="version" data-t="checking"></div></div>
-    <a class="button" id="get" href="https://github.com/scoutr2019/zono/releases/download/tv/Zono-TV.apk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="get-label"></span></a>
+    <a class="button" id="get" href="https://github.com/scoutr2019/zono/raw/main/tv/Zono-TV.apk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="get-label"></span></a>
   </div>
 
   <section id="steps"></section>
@@ -93,11 +93,11 @@ footer{text-align:center;color:var(--muted);font-size:14px;padding:0 16px 40px}
   <div id="faq"></div>
   <div class="card note"><p data-t="playerOnly" style="margin:0"></p></div>
 </main>
-<footer>© 2026 Zono TV · <a href="/">zono.be</a> · <a href="/privacy.html">Privacy</a> · <a href="mailto:support@zono.be">support@zono.be</a> · <a href="https://github.com/scoutr2019/zono/releases/tag/tv">GitHub</a></footer>
+<footer>© 2026 Zono TV · <a href="/">zono.be</a> · <a href="/privacy.html">Privacy</a> · <a href="mailto:support@zono.be">support@zono.be</a> · <a href="https://github.com/scoutr2019/zono/tree/main/tv">GitHub</a></footer>
 <script>
-/* The newest TV version comes from GitHub (release "tv", files Zono-TV.apk and Zono-TV.ipk):
+/* The newest TV version comes from GitHub (folder tv/: Zono-TV.apk, Zono-TV.ipk, version.json):
    nothing on this page has to change for a new version. */
-var GH = "https://github.com/scoutr2019/zono/releases/download/tv/";
+var GH = "https://github.com/scoutr2019/zono/raw/main/tv/";
 var T = {
 nl: {
   title: "Zono op je tv",
@@ -311,12 +311,10 @@ function render() {
   showVersion();
 }
 function showVersion() {
-  var el = document.getElementById("version");
   if (!release) return;
-  var file = release.assets.filter(function (a) { return a.name === (device === "android" ? "Zono-TV.apk" : "Zono-TV.ipk"); })[0];
-  var number = (String(release.name || "").match(/\d+\.\d+(\.\d+)?/) || [""])[0];
-  var when = new Date((file && file.updated_at) || release.published_at).toLocaleDateString(LOCALE[lang], { day: "numeric", month: "long", year: "numeric" });
-  el.textContent = T[lang].version + " " + number + " · " + when + (file ? " · " + (file.size / 1048576).toFixed(1) + " MB" : "");
+  var bytes = release[device === "android" ? "apk" : "ipk"];
+  var when = new Date(release.date + "T12:00:00").toLocaleDateString(LOCALE[lang], { day: "numeric", month: "long", year: "numeric" });
+  document.getElementById("version").textContent = T[lang].version + " " + release.version + " · " + when + (bytes ? " · " + (bytes / 1048576).toFixed(1) + " MB" : "");
 }
 document.querySelectorAll("[data-pick]").forEach(function (b) { b.onclick = function () {
   lang = b.getAttribute("data-pick"); try { localStorage.setItem("zono-language", lang); } catch (e) {} render();
@@ -331,9 +329,9 @@ document.querySelectorAll("[data-device]").forEach(function (b) { b.onclick = fu
   lang = pick;
   if (location.hash === "#lg" || (!location.hash && /web0s|webos|netcast/i.test(navigator.userAgent))) device = "lg";
   render();
-  fetch("https://api.github.com/repos/scoutr2019/zono/releases/tags/tv", { headers: { Accept: "application/vnd.github+json" } })
+  fetch("https://raw.githubusercontent.com/scoutr2019/zono/main/tv/version.json", { cache: "no-store" })
     .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (data) { if (data && data.assets) { release = data; showVersion(); } else document.getElementById("version").textContent = ""; })
+    .then(function (data) { if (data && data.version) { release = data; showVersion(); } else document.getElementById("version").textContent = ""; })
     .catch(function () { document.getElementById("version").textContent = ""; });
 })();
 </script>
