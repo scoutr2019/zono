@@ -443,3 +443,7 @@ video::cue { font-size: 46px; background: rgba(0,0,0,.65); color: #fff; }
 .live .channels .logo-box { width: 92px; height: 58px; }
 .live .channels .row-item { padding: 12px 18px; }
 .live .channels .row-item .zap-num { min-width: 40px; font-size: 21px; }
+
+/* ---- 0.7: lighter for the TV's graphics chip: no animations on rows and cards, no fades */
+.row-item, .pill, .btn, .card .pic, .who-card, .hero-bg, .hero-text, .livebar, .banner, .bar, .toast, .numbox { transition: none !important; }
+.card:focus .pic { box-shadow: 0 0 0 5px #fff; }

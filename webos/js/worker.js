@@ -62,7 +62,6 @@ function store(key, value) {
 /** Search text: the clean title and the provider's own name, lower case, made once. */
 function searchKeys(items) {
   items.forEach(function (i) {
-    i.q = (i.title + " " + (i.raw || "")).toLowerCase();
     if (Guide.adult(i.group) || Guide.adult(i.title)) i.adult = 1; // for kids profiles
     if (i.kind === "live") i.k4 = Catalog.itemUhd(i) ? 1 : 0; // 4K, worked out once
     i.cc = Countries.detect(i); // country, for "your countries first"
@@ -74,7 +73,7 @@ function load(id, source) {
   var step = function (kind) { postMessage({ id: id, type: "step", kind: kind }); };
   var done = function (items, guideUrl) {
     searchKeys(items);
-    return store("library", items).then(function () { send(id, items, { guideUrl: guideUrl || "" }); });
+    return store("library", items).then(function () { return store("libraryVersion", 7); }).then(function () { send(id, items, { guideUrl: guideUrl || "" }); });
   };
   if (source.type !== "xtream") {
     step("live");
@@ -106,26 +105,46 @@ function load(id, source) {
   });
 }
 
-function xmltv(id, url, keep, names) {
-  return get(url, 240000, 120 * 1024 * 1024).then(function (text) {
-    var guide = Guide.parseXmltv(text, null);
-    text = null;
-    var wanted = {};
-    keep.forEach(function (k) { if (guide.programs[k]) wanted[k] = 1; });
-    names.forEach(function (n) { var c = Guide.channelFor(guide, { title: n }); if (c) wanted[c] = 1; });
-    Object.keys(guide.programs).forEach(function (c) { if (!wanted[c]) delete guide.programs[c]; });
-    return store("xmltv", { url: url, at: Date.now(), guide: guide }).then(function () {
-      postMessage({ id: id, type: "done", guide: guide });
+// big XMLTV guides stay here: the screen only gets search results and one channel's programmes
+var guides = {}, guideChannels = {};
+function xmltv(id, url, channels) {
+  function ready() { postMessage({ id: id, type: "done", ok: true }); }
+  if (guides[url]) return Promise.resolve(ready());
+  return read("xmltv").then(function (cached) {
+    if (cached && cached.url === url && Date.now() - cached.at < 6 * 3600000) return cached.guide;
+    return get(url, 240000, 120 * 1024 * 1024).then(function (text) {
+      var guide = Guide.parseXmltv(text, null);
+      text = null;
+      var wanted = {};
+      channels.forEach(function (c) { var g = Guide.channelFor(guide, c); if (g) wanted[g] = 1; });
+      Object.keys(guide.programs).forEach(function (c) { if (!wanted[c]) delete guide.programs[c]; });
+      return store("xmltv", { url: url, at: Date.now(), guide: guide }).then(function () { return guide; });
     });
+  }).then(function (guide) {
+    guides = {}; guides[url] = guide; guideChannels[url] = channels;
+    ready();
   });
+}
+function guideSearch(id, url, query) {
+  var guide = guides[url];
+  var hits = guide ? Guide.search(guide, guideChannels[url] || [], query) : [];
+  postMessage({ id: id, type: "done", ok: !!guide, hits: hits.map(function (h) { return { channel: h.channel.id, program: h.program }; }) });
+}
+function guideChannel(id, url, item) {
+  var guide = guides[url], c = guide && Guide.channelFor(guide, item);
+  postMessage({ id: id, type: "done", rows: c ? guide.programs[c] : [] });
 }
 
 onmessage = function (e) {
   var m = e.data;
   var job = m.type === "load" ? load(m.id, m.source)
     : m.type === "epg" ? json(m.url).then(function (data) { postMessage({ id: m.id, type: "done", rows: Guide.xtreamPrograms(data) }); })
-    : m.type === "cache" ? read("library").then(function (items) { send(m.id, items || [], { old: !!(items && items[0] && (!items[0].q || items[0].cc === undefined)) }); })
-    : xmltv(m.id, m.url, m.keep || [], m.names || []);
+    : m.type === "cache" ? read("libraryVersion").then(function (version) {
+      return read("library").then(function (items) { send(m.id, items || [], { old: version !== 7 }); });
+    })
+    : m.type === "gsearch" ? Promise.resolve(guideSearch(m.id, m.url, m.query))
+    : m.type === "gchan" ? Promise.resolve(guideChannel(m.id, m.url, m.item))
+    : xmltv(m.id, m.url, m.channels || []);
   job.catch(function (problem) {
     postMessage({ id: m.id, type: "error", code: (problem && problem.code) || "error", message: (problem && (problem.message || problem.code)) || String(problem) });
   });

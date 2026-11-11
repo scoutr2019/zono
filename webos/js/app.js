@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "0.6.0";
+  var VERSION = "0.7.0";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
   var API = window.ZONO_API || "https://zono.be/api";
@@ -99,7 +99,8 @@
   function parse(t) { return JSON.parse(String(t).replace(/^﻿/, "")); }
   function json(url) { return get(url).then(parse); }
   function post(url, body, headers) {
-    var all = { "Content-Type": "application/json" }; for (var k in headers || {}) all[k] = headers[k];
+    // text/plain: a "simple" request, so the TV does not have to ask the server for permission first (zono.be reads it as JSON)
+    var all = { "Content-Type": "text/plain;charset=UTF-8" }; for (var k in headers || {}) all[k] = headers[k];
     return request("POST", url, JSON.stringify(body), all, 20000).then(function (t) { return t ? parse(t) : {}; });
   }
   function loginError() { var e = new Error(T("error_login")); e.login = true; return e; }
@@ -176,10 +177,11 @@
   function loadProfileData() {
     profileId = load("profile", "main");
     profileId = currentProfile().id;
-    S.progress = pload("progress", []);
-    S.favorites = pload("favorites", []);
-    S.recent = pload("recent", []);
-    S.reminders = pload("reminders", []);
+    var sid = Catalog.shortId;
+    S.progress = pload("progress", []).map(function (p) { p.item.id = sid(p.item.id); return p; });
+    S.favorites = pload("favorites", []).map(sid);
+    S.recent = pload("recent", []).map(sid);
+    S.reminders = pload("reminders", []).map(function (r) { r.channel = sid(r.channel); return r; });
     S.hidden = pload("hidden", []);
     S.countries = pload("countries", []);
   }
@@ -245,7 +247,8 @@
     S.choosing = !!S.source && needsChoice();
     if (!S.source) return render();
     S.loading = true; render();
-    work({ type: "cache" }).then(function (m) { return m.items; }, function () { return []; }).then(function (items) {
+    var cacheOld = false;
+    work({ type: "cache" }).then(function (m) { cacheOld = m.old; return m.items; }, function () { return []; }).then(function (items) {
       if (items && items.length) {
         S.items = items;
         setTimeout(function () {
@@ -253,7 +256,7 @@
           S.loading = false;
           setTimeout(render, 0);
         }, 0);
-        var old = !items[0].q, due = Date.now() - load("refreshedAt", 0) > 6 * 3600000;
+        var old = cacheOld, due = Date.now() - load("refreshedAt", 0) > 6 * 3600000;
         if (old || due) setTimeout(function () { refresh(S.source, true); }, old ? 500 : 15000);
       } else refresh(S.source, false);
     });
@@ -263,8 +266,8 @@
     if (item.kind === "catchup") return;
     var list = S.progress.filter(function (p) { return p.item.id !== item.id; });
     if (!(dur > 0 && pos > dur * 0.94) && pos > 60) {
-      list.unshift({ item: { id: item.id, kind: item.kind, title: item.title, image: item.image || "", url: item.url, group: item.group || "",
-        number: item.number || 0, sid: item.sid || "" }, pos: pos, dur: dur, t: Date.now() });
+      list.unshift({ item: { id: item.id, kind: item.kind, title: item.title, image: item.image || "", url: item.url || "", sid: item.sid || "", ext: item.ext || "", group: item.group || "",
+        number: item.number || 0 }, pos: pos, dur: dur, t: Date.now() });
     }
     S.progress = list.slice(0, 40);
     psave("progress", S.progress);
@@ -297,37 +300,35 @@
         var rows = m.rows || [];
         if (!rows.length && full) return programsFor(item, false);
         epgCache[item.id] = { at: Date.now(), full: full, rows: rows };
+        var keys = Object.keys(epgCache);
+        if (keys.length > 400) keys.slice(0, keys.length - 300).forEach(function (k) { delete epgCache[k]; });
         return rows;
       }, function () { return xmltvRows(item); });
     }
     return xmltvRows(item);
   }
   function xmltvRows(item) {
-    return loadXmltv(false).then(function (guide) {
-      var id = guide && Guide.channelFor(guide, item);
-      return id ? guide.programs[id] : [];
+    return loadXmltv(false).then(function (url) {
+      if (!url) return [];
+      return work({ type: "gchan", url: url, item: { epg: item.epg, tvgName: item.tvgName, title: item.title } }).then(function (m) { return m.rows || []; });
     });
   }
-  /** The XMLTV guide: the playlist's own (M3U), or for searching the provider's whole guide (Xtream, can be big). */
+  /** The XMLTV guide (the playlist's own for M3U, or for searching the provider's whole guide). It is kept in the
+   *  worker; this returns its link once it is ready there, or "" when there is none. */
   function loadXmltv(forSearch) {
     var url = S.source.type === "xtream" ? (forSearch ? Catalog.xmltvUrl(S.source) : "") : load("guideUrl", "");
-    if (!url) return Promise.resolve(null);
-    if (xmltv.url === url && xmltv.guide) return Promise.resolve(xmltv.guide);
+    if (!url) return Promise.resolve("");
+    if (xmltv.url === url && xmltv.state === "ready") return Promise.resolve(url);
     if (xmltv.url === url && xmltv.promise) return xmltv.promise;
+    if (/\.gz(\?|$)/i.test(url)) { xmltv.state = "failed"; return Promise.resolve(""); }
     xmltv.url = url; xmltv.state = "loading";
-    xmltv.promise = db.get("xmltv").then(function (cached) {
-      if (cached && cached.url === url && Date.now() - cached.at < 6 * 3600000) return cached.guide;
-      if (/\.gz(\?|$)/i.test(url)) throw new Error("gz");
-      var keep = [], names = [];
-      S.items.forEach(function (i) { if (i.kind === "live") { if (i.epg) keep.push(i.epg); names.push(i.tvgName || i.title); } });
-      return work({ type: "xmltv", url: url, keep: keep, names: names }).then(function (m) { return m.guide; }, function (m) { throw new Error(m.code === "big" ? "too big" : m.message); });
-    }).then(function (guide) {
-      xmltv.guide = guide; xmltv.state = guide ? "ready" : "failed";
-      return guide;
-    }, function (problem) {
-      log("guide: " + problem.message);
-      xmltv.state = problem.message === "too big" ? "big" : "failed"; xmltv.promise = null;
-      return null;
+    var channels = S.shelves.live.map(function (c) { return { id: c.id, epg: c.epg, tvgName: c.tvgName, title: c.title }; });
+    xmltv.promise = work({ type: "xmltv", url: url, channels: channels }).then(function () {
+      xmltv.state = "ready"; return url;
+    }, function (m) {
+      log("guide: " + (m.message || m.code));
+      xmltv.state = m.code === "big" ? "big" : "failed"; xmltv.promise = null;
+      return "";
     });
     return xmltv.promise;
   }
@@ -435,11 +436,25 @@
     var p = PAIRS[hash(title) % PAIRS.length];
     return h("div", { cls: "ph", style: "background:linear-gradient(135deg," + p[0] + "," + p[1] + ")", text: Catalog.initials(title) });
   }
+  /** Pictures load when they come into view (a page can hold hundreds), in a TV-friendly size. */
+  var seen = window.IntersectionObserver ? new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      var img = e.target; seen.unobserve(img);
+      if (img._src) { img.src = img._src; img._src = null; }
+    });
+  }, { rootMargin: "300px" }) : null;
   function picture(src, cls) {
     if (!src) return null;
-    var img = h("img", { src: src, alt: "", cls: cls, decoding: "async" });
+    var img = h("img", { alt: "", cls: cls, decoding: "async" });
     img.onerror = function () { img.remove(); };
+    src = posterSize(src, cls);
+    if (seen) { img._src = src; seen.observe(img); } else img.src = src;
     return img;
+  }
+  /** TMDB pictures in the size the TV shows them (originals can be thousands of pixels wide). */
+  function posterSize(src, cls) {
+    return String(src).replace(/\/t\/p\/(?:original|w1280|w1920|w780|w500)\//, cls === "poster-bg" ? "/t/p/w780/" : "/t/p/w342/");
   }
   function bar(fraction) { return h("div", { cls: "progress" }, [h("div", { style: "width:" + Math.max(2, Math.min(1, fraction) * 100) + "%" })]); }
 
@@ -814,7 +829,7 @@
     function background(layer, item, info) {
       layer.innerHTML = "";
       var bg = smaller(info.backdrop || item.backdrop);
-      layer.appendChild(bg ? picture(bg) : item.image ? picture(item.image, "poster-bg") : placeholder(item.title));
+      layer.appendChild(bg ? picture(bg, "poster-bg") : item.image ? picture(item.image, "poster-bg") : placeholder(item.title));
     }
     function words(item, info) {
       var had = box.contains(document.activeElement) ? currentKey() : null;
@@ -853,11 +868,10 @@
           var back = layers[1 - front];
           background(back, item, info);
           back.classList.add("on"); layers[front].classList.remove("on"); front = 1 - front;
-          text.classList.add("fade");
-          setTimeout(function () { words(item, info); text.classList.remove("fade"); }, 350);
+          words(item, info);
         });
       });
-    }, 15000);
+    }, 20000);
     return box;
   }
   function greeting() {
@@ -965,9 +979,8 @@
       infoTimer = setTimeout(function () {
         if (card._channel !== c) return;
         nowCard(card, c);
-        // the small picture follows you, once you stop on a channel for a moment
-        clearTimeout(mini.follow);
-        mini.follow = setTimeout(function () { if (card._channel === c && card.parentNode) miniPlay(c, slot); }, now ? 0 : 900);
+        // the small picture shows your channel (opening a stream for every channel you pass makes the TV slow)
+        if (now) { clearTimeout(mini.follow); mini.follow = setTimeout(function () { if (slot.parentNode) miniPlay(c, slot); }, 1200); }
       }, now ? 0 : 250);
     }
     lazyList(channelList, channels, function (c) {
@@ -1280,10 +1293,13 @@
         var status = h("div", { cls: "empty", text: T("guide_loading") });
         tv.appendChild(status);
         var asked = query;
-        loadXmltv(true).then(function (guide) {
+        loadXmltv(true).then(function (url) {
+          if (!url) return { ok: false, hits: [] };
+          return work({ type: "gsearch", url: url, query: asked });
+        }).then(function (answer) {
           if (asked !== query) return;
-          var hits = guide ? Guide.search(guide, S.shelves.live, query) : [];
-          status.textContent = !guide ? T(xmltv.state === "big" ? "guide_too_big" : "no_guide_search") : hits.length ? "" : T("no_results");
+          var hits = (answer.hits || []).map(function (h) { return { channel: find(h.channel), program: h.program }; }).filter(function (h) { return h.channel; });
+          status.textContent = !answer.ok ? T(xmltv.state === "big" ? "guide_too_big" : "no_guide_search") : hits.length ? "" : T("no_results");
           hits.forEach(function (hit) {
             var p = hit.program, c = hit.channel, live = p.start <= nowSeconds();
             tv.appendChild(rowItem(p.title, function () { if (live) playChannel(c); else { toggleReminder(c, p); fill(); } },
@@ -1635,7 +1651,8 @@
   /** Position of an element in page pixels (the page is laid out at 1920x1080 and zoomed as a whole). */
   function pagePos(el) { var x = 0, y = 0; for (var n = el; n && n !== document.body; n = n.offsetParent) { x += n.offsetLeft - (n.scrollLeft || 0); y += n.offsetTop - (n.scrollTop || 0); } return { x: x, y: y }; }
   function miniPlay(channel, slot) {
-    if (!channel || !slot || !slot.parentNode || sheetOpen()) return;
+    // only on the page that asked for it, and never over something playing full screen
+    if (!channel || !slot || !document.body.contains(slot) || sheetOpen() || playerOpen()) return;
     var at = pagePos(slot);
     player.style.left = at.x + "px"; player.style.top = at.y + "px";
     player.style.width = slot.offsetWidth + "px"; player.style.height = slot.offsetHeight + "px";
@@ -1695,8 +1712,9 @@
     clearSubtitles();
     video.pause();
     video.removeAttribute("src"); video.load();
-    video.src = item.url;
-    log("play " + item.kind + " " + item.url);
+    var link = Catalog.urlOf(item, S.source);
+    video.src = link;
+    log("play " + item.kind + " " + link);
     var info = "", saved = null;
     if (!isLive() && resume) saved = progressOf(item.id);
     if (saved && saved.pos > 0) {
@@ -1823,15 +1841,16 @@
   video.addEventListener("error", function () {
     if (!playerOpen() || !video.getAttribute("src")) return;
     var item = current();
-    log("playback error " + (video.error && video.error.code) + " " + item.url);
+    var link = Catalog.urlOf(item, S.source);
+    log("playback error " + (video.error && video.error.code) + " " + link);
     if (!P.retried) {
       P.retried = true;
       setTimeout(function () { video.load(); var p = video.play(); if (p && p.catch) p.catch(function () {}); }, 1500);
       return;
     }
-    if (isLive() && /\.m3u8$/.test(item.url)) {
+    if (isLive() && /\.m3u8$/.test(link)) {
       var copy = {}; for (var key in item) copy[key] = item[key];
-      copy.url = item.url.replace(/\.m3u8$/, ".ts");
+      copy.url = link.replace(/\.m3u8$/, ".ts");
       P.queue[P.index] = copy;
       return startItem(false);
     }

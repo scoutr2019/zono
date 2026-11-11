@@ -54,6 +54,13 @@ function provider(req, res) {
     if (url.pathname === "/subs/download") return res.end(JSON.stringify({ link: "http://" + req.headers.host + "/subs/file.srt" }));
     if (url.pathname === "/subs/file.srt") return res.end("1\r\n00:00:00,500 --> 00:00:30,000\r\nHallo ondertitel\r\n");
     // fake provider
+    if (url.pathname === "/xmltv.php") {
+      const t = (d) => { const x = new Date(d * 1000); const p = (n) => String(n).padStart(2, "0"); return `${x.getUTCFullYear()}${p(x.getUTCMonth() + 1)}${p(x.getUTCDate())}${p(x.getUTCHours())}${p(x.getUTCMinutes())}00 +0000`; };
+      res.setHeader("Content-Type", "application/xml");
+      return res.end(`<?xml version="1.0"?><tv><channel id="vrt1"><display-name>VRT 1 4K 1</display-name></channel>
+        <programme start="${t(NOW + 3600)}" stop="${t(NOW + 5400)}" channel="vrt1"><title>Avondjournaal</title></programme>
+        <programme start="${t(NOW + 3600)}" stop="${t(NOW + 5400)}" channel="other"><title>Avondjournaal elders</title></programme></tv>`);
+    }
     const q = url.searchParams, good = q.get("username") === "demo" && q.get("password") === "geheim", action = q.get("action");
     const groups = ["4K | Belgie", "Belgie", "Nederland", "Sport", "XXX Adults"];
     let out;
@@ -133,7 +140,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check(!(await page.$(".detail")), "Back leaves the film page");
 
   // (desktop Chromium cannot play HLS like the TV does, so live channels get the test video's own format here)
-  await page.evaluate(() => Zono.state.items.forEach((i) => { if (i.kind === "live") i.url = i.url.replace(/\.m3u8$/, ".webm"); }));
+  await page.evaluate(() => Zono.state.items.forEach((i) => { if (i.kind === "live") i.url = Catalog.urlOf(i, Zono.state.source).replace(/\.m3u8$/, ".webm"); }));
   const miniOn = () => page.evaluate(() => { const p = document.getElementById("player"); return !p.hidden && p.classList.contains("mini") ? Zono.mini.channel && Zono.mini.channel.title : null; });
 
   // ---- live tv: groups, channels, small picture, what's on
@@ -146,12 +153,13 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   const firstMini = await miniOn();
   check(!!firstMini, "a small picture plays in Live TV: " + firstMini);
   await key("ArrowRight"); await key("ArrowDown"); await sleep(1800);
-  const nextMini = await miniOn();
-  check(nextMini && nextMini !== firstMini && (await focused()).includes(nextMini), "the small picture follows the channel you stop on");
+  check((await miniOn()) === firstMini, "browsing does not open a new stream for every channel");
+  await sleep(400);
+  check(await page.evaluate(() => document.activeElement.querySelector(".line").lastChild.textContent === document.querySelector(".now-card .nc-name").textContent), "the card shows the channel you are on");
   check((await video()).t > 0.2, "the small picture plays");
   await shot("03-live");
   await key("Enter"); await sleep(400);
-  check((await page.evaluate(() => !document.getElementById("player").classList.contains("mini"))) && await page.isVisible("#livebar.on"), "OK: that channel full screen (without starting again)");
+  check((await page.evaluate(() => !document.getElementById("player").classList.contains("mini"))) && await page.isVisible("#livebar.on"), "OK: that channel full screen");
   await key("Escape"); await sleep(1500);
   check(!!(await page.$(".live .mini-slot")) && !!(await miniOn()), "Back: Live TV with the small picture again");
 
@@ -164,7 +172,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check(!!(await miniOn()), "small picture top right in the TV guide: " + (await miniOn()));
   check(!!(await page.$(".now-line")) && !!(await page.$(".now-label")), "guide: red line at the current time");
   await key("5"); await sleep(1800);
-  check(await page.evaluate(() => document.activeElement.closest(".tvg-row").getAttribute("data-channel").endsWith("|live|5")), "typing 5 in the guide goes to channel 5");
+  check(await page.evaluate(() => document.activeElement.closest(".tvg-row").getAttribute("data-channel") === "l5"), "typing 5 in the guide goes to channel 5");
   check((await miniOn() || "").endsWith(" 5") && !(await page.isVisible("#player:not(.mini)")), "… and the small picture shows it, on the guide page");
   await key("ArrowDown"); await sleep(200);
   const below = await page.evaluate(() => document.activeElement.closest(".tvg-row").querySelector(".cname").textContent);
@@ -192,7 +200,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   await shot("04b-tvguide");
 
   // ---- the guide of one channel (hold OK in the grid): catch-up and reminders
-  await page.evaluate(() => [...document.querySelectorAll(".tvg-row[data-channel]")].find((r) => r.getAttribute("data-channel").endsWith("|live|1")).querySelector(".tvg-box.now").focus());
+  await page.evaluate(() => [...document.querySelectorAll(".tvg-row[data-channel]")].find((r) => r.getAttribute("data-channel") === "l1").querySelector(".tvg-box.now").focus());
   await hold();
   await page.waitForSelector(".guide-list .row-item");
   check((await page.$$eval(".guide .day", (d) => d.map((x) => x.textContent))).includes("Vandaag"), "guide: days");
@@ -300,6 +308,14 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check((await page.evaluate(() => Zono.state.progress.length)) === 0, "every profile has its own 'continue watching'");
   check((await page.textContent(".menu .me")).includes("Kids"), "the menu shows the profile");
 
+  // ---- search: titles and the TV guide (the guide is read and searched in the background)
+  await focusKey("menu-search"); await key("Enter"); await sleep(200);
+  await page.fill('[data-key="search"]', "oppen"); await sleep(1200);
+  check((await page.$$(".grid .card")).length > 5, "search finds the films");
+  await page.fill('[data-key="search"]', "avondjournaal"); await sleep(2000);
+  const tvHits = await page.textContent(".search-tv");
+  check(tvHits.includes("Avondjournaal") && tvHits.includes("VRT 1 4K 1") && !tvHits.includes("elders"), "search finds programmes in the TV guide");
+
   // ---- report a problem, statistics
   await focusKey("menu-settings"); await key("Enter"); await sleep(100);
   await focusKey("report"); await key("Enter"); await sleep(100);
@@ -309,7 +325,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check(!received.report[0].log.includes("geheim") && received.report[0].log.includes("/live/***/***/"), "the log has no login details");
   check((await page.textContent("#toast")).includes("#42"), "the report number is shown");
   await page.evaluate(() => Zono.ping()); await sleep(400);
-  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.6.0", "anonymous daily ping");
+  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.7.0", "anonymous daily ping");
 
   // ---- restart: first profile again, film progress kept
   await page.evaluate(() => localStorage.setItem("zono.profile", JSON.stringify("main")));

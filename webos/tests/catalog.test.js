@@ -33,15 +33,19 @@ test("xtream streams", () => {
   const live = C.streams([{ name: "VRT 1 HD", stream_id: 101, stream_icon: "http://logo", category_id: "1" },
     { name: "VTM 4K", stream_id: "102", stream_icon: null, category_id: "2" }, { name: "no id" }], "live", source, groups);
   assert.equal(live.length, 2);
-  assert.equal(live[0].url, "http://example.com:8080/live/jan%20peeters/p%40ss%2F1/101.m3u8");
+  assert.equal(live[0].id, "l101");
+  assert.equal(live[0].url, undefined, "links are made when playing");
+  assert.equal(C.urlOf(live[0], source), "http://example.com:8080/live/jan%20peeters/p%40ss%2F1/101.m3u8");
   assert.equal(live[1].image, "");
   const movies = C.streams([{ name: "Film", stream_id: 5, container_extension: "mkv", rating: "7.84", added: "1700000000" },
     { name: "Old", stream_id: 6, rating_5based: 4.5, container_extension: "" }], "movie", source, {});
   assert.equal(movies[0].rating, 7.8);
   assert.equal(movies[0].added, 1700000000);
-  assert.ok(movies[0].url.endsWith("/5.mkv"));
+  assert.ok(C.urlOf(movies[0], source).endsWith("/5.mkv"));
   assert.equal(movies[1].rating, 9);
-  assert.ok(movies[1].url.endsWith("/6.mp4"));
+  assert.ok(C.urlOf(movies[1], source).endsWith("/6.mp4"));
+  assert.equal(C.shortId("http://x:1|movie|5"), "m5");
+  assert.equal(C.shortId("http://x/list.m3u8"), "http://x/list.m3u8");
   assert.throws(() => C.streams({ user_info: { auth: 0 } }, "live", source, {}));
 });
 

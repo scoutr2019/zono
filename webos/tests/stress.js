@@ -46,25 +46,29 @@ const files = http.createServer((req, res) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ["--enable-precise-memory-info"] });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   const cdp = await page.context().newCDPSession(page);
   await page.addInitScript(() => {
-    window.__long = [];
+    window.__long = []; window.__frames = [];
+    (function tick(last) { requestAnimationFrame(function (t) { if (last) window.__frames.push(t - last); tick(t); }); })(0);
     new PerformanceObserver((l) => l.getEntries().forEach((e) => window.__long.push(e.duration))).observe({ entryTypes: ["longtask"] });
     localStorage.setItem("zono.source", JSON.stringify({ type: "xtream", server: "http://127.0.0.1:8801", user: "u", password: "p" }));
     window.ZONO_PAIR_API = "http://127.0.0.1:1/x"; window.ZONO_API = "http://127.0.0.1:1";
   });
   const errors = []; page.on("pageerror", (e) => errors.push(String(e)));
   async function phase(name, run) {
-    await page.evaluate(() => (window.__long = []));
+    await page.evaluate(() => { window.__long = []; window.__frames = []; });
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: SLOW });
     const t = Date.now();
     await run();
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
     const long = await page.evaluate(() => window.__long);
+    const frames = await page.evaluate(() => window.__frames);
+    const slow = frames.filter((f) => f > 50).length, fps = frames.length ? Math.round(1000 / (frames.reduce((a, b) => a + b, 0) / frames.length)) : 0;
+    const heap = await page.evaluate(() => performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : 0);
     const worst = Math.round(Math.max(0, ...long)), total = Math.round(long.reduce((a, b) => a + b, 0));
-    console.log(`${name.padEnd(34)} took ${String(Date.now() - t).padStart(6)} ms   longest freeze ${String(worst).padStart(6)} ms   frozen in total ${String(total).padStart(6)} ms`);
+    console.log(`${name.padEnd(34)} longest freeze ${String(worst).padStart(5)} ms  total ${String(total).padStart(5)} ms  | ${String(fps).padStart(3)} fps, ${String(slow).padStart(3)} slow frames | memory ${heap} MB`);
   }
   const key = async (k, n = 1) => { for (let i = 0; i < n; i++) { await page.keyboard.press(k); await sleep(120); } };
   await phase("first start (load everything)", async () => {

@@ -76,10 +76,11 @@
       var row = data[i];
       if (!row || typeof row !== "object" || row[key] === undefined || row[key] === null) continue;
       var sid = String(row[key]);
-      var url = kind === "series" ? "" : kind === "live" ? streamUrl(source, "live", sid, "m3u8")
-        : streamUrl(source, "movie", sid, str(row.container_extension) || "mp4");
-      var item = { id: server + "|" + kind + "|" + sid, kind: kind, sid: sid, title: str(row.name) || sid,
-        group: groups[str(row.category_id)] || "", image: str(row.cover) || str(row.stream_icon), url: url };
+      // short ids and no stored links: with 100,000 titles that saves a lot of the TV's memory (see urlOf)
+      var item = { id: kind.charAt(0) + sid, kind: kind, sid: sid, title: str(row.name) || sid,
+        group: groups[str(row.category_id)] || "", image: str(row.cover) || str(row.stream_icon) };
+      var ext = str(row.container_extension);
+      if (kind === "movie" && ext && ext !== "mp4") item.ext = ext;
       if (kind === "live") {
         if (row.num !== undefined && row.num !== null) item.num = parseInt(row.num, 10) || 0;
         if (str(row.epg_channel_id)) item.epg = str(row.epg_channel_id);
@@ -94,6 +95,19 @@
       items.push(item);
     }
     return tidy(items);
+  }
+
+  /** The link to play an item (Xtream links are made when needed, M3U items keep their own). */
+  function urlOf(item, source) {
+    if (item.url) return item.url;
+    if (item.kind === "live") return streamUrl(source, "live", item.sid, "m3u8");
+    if (item.kind === "movie") return streamUrl(source, "movie", item.sid, item.ext || "mp4");
+    return "";
+  }
+  /** Ids from before 0.7 ("http://server|movie|12") -> the short ones ("m12"). */
+  function shortId(id) {
+    var m = /\|(live|movie|series|episode)\|([^|]+)$/.exec(String(id || ""));
+    return m ? m[1].charAt(0) + m[2] : id;
   }
 
   function cleanEpisode(raw) {
@@ -113,7 +127,7 @@
         if (!ep || ep.id === undefined) return;
         var info = ep.info && typeof ep.info === "object" ? ep.info : {};
         var season = parseInt(ep.season, 10) || pair[0], number = Math.floor(num(ep.episode_num));
-        rows.push({ id: server + "|episode|" + ep.id, kind: "episode", sid: String(ep.id), title: cleanEpisode(str(ep.title)),
+        rows.push({ id: "e" + ep.id, kind: "episode", sid: String(ep.id), title: cleanEpisode(str(ep.title)),
           group: String(season), number: number, image: str(info.movie_image), plot: str(info.plot),
           url: streamUrl(source, "series", String(ep.id), str(ep.container_extension) || "mp4") });
       });
@@ -236,7 +250,7 @@
   function words(query) { return String(query || "").toLowerCase().split(/\s+/).filter(Boolean); }
   function matches(item, w) {
     if (!w.length) return false;
-    var t = item.q || (item.q = (item.title + " " + (item.raw || "")).toLowerCase());
+    var t = (item.title + " " + (item.raw || "")).toLowerCase(); // not kept: memory matters more than speed here
     return w.every(function (x) { return t.indexOf(x) >= 0; });
   }
 
@@ -296,6 +310,6 @@
 
   var api = { isUhd: isUhd, itemUhd: itemUhd, uhdFirst: uhdFirst, groupsOf: groupsOf, base: base, quote: quote,
     streamUrl: streamUrl, apiUrl: apiUrl, categories: categories, streams: streams, episodes: episodes,
-    cleanEpisode: cleanEpisode, cleanTitle: cleanTitle, cleanName: cleanName, isSeparator: isSeparator, tidy: tidy, parseM3u: parseM3u, m3uGuideUrl: m3uGuideUrl, xmltvUrl: xmltvUrl, words: words, matches: matches, initials: initials, shelves: shelves };
+    cleanEpisode: cleanEpisode, urlOf: urlOf, shortId: shortId, cleanTitle: cleanTitle, cleanName: cleanName, isSeparator: isSeparator, tidy: tidy, parseM3u: parseM3u, m3uGuideUrl: m3uGuideUrl, xmltvUrl: xmltvUrl, words: words, matches: matches, initials: initials, shelves: shelves };
   if (typeof module !== "undefined") module.exports = api; else root.Catalog = api;
 })(this);
