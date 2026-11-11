@@ -620,5 +620,14 @@
  "Elke aflevering op {}": "Chaque épisode sur {}",
  "OpenSubtitles antwoordde niet: {}": "OpenSubtitles n'a pas répondu : {}",
  "Je hebt al veel meldingen verstuurd. Probeer het over een uur opnieuw.": "Vous avez déjà envoyé beaucoup de signalements. Réessayez dans une heure.",
- "zono.be antwoordde met HTTP {}": "zono.be a répondu HTTP {}"
+ "zono.be antwoordde met HTTP {}": "zono.be a répondu HTTP {}",
+ "Je andere toestellen": "Vos autres appareils",
+ "Verder kijken op al je toestellen": "Reprendre sur tous vos appareils",
+ "Waar je was, je favorieten en je laatste zender, op je pc, LG en Android TV met hetzelfde abonnement. Versleuteld: zono.be kan het niet lezen.": "Où vous en étiez, vos favoris et votre dernière chaîne, sur PC, LG et Android TV avec le même abonnement. Chiffré : zono.be ne peut pas le lire.",
+ "Koppelcode (leeg: automatisch via je abonnement)": "Code d'association (vide : automatique via votre abonnement)",
+ "Deel je je abonnement met anderen, of gebruik je een afspeellijst? Maak dan een koppelcode en vul dezelfde code in op je tv (Instellingen › Koppelcode).": "Vous partagez votre abonnement ou utilisez une playlist ? Créez un code et saisissez le même code sur votre télé (Paramètres › Code d'association).",
+ "Een koppelcode heeft 16 tekens.": "Un code compte 16 caractères.",
+ "Koppelcode bewaard": "Code enregistré",
+ "Weer automatisch gekoppeld": "De nouveau associé automatiquement",
+ "Nieuwe koppelcode": "Nouveau code"
 }

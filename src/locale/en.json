@@ -620,5 +620,14 @@
  "Elke aflevering op {}": "Every episode on {}",
  "OpenSubtitles antwoordde niet: {}": "OpenSubtitles didn't respond: {}",
  "Je hebt al veel meldingen verstuurd. Probeer het over een uur opnieuw.": "You've sent a lot of reports already. Please try again in an hour.",
- "zono.be antwoordde met HTTP {}": "zono.be replied with HTTP {}"
+ "zono.be antwoordde met HTTP {}": "zono.be replied with HTTP {}",
+ "Je andere toestellen": "Your other devices",
+ "Verder kijken op al je toestellen": "Continue watching on all your devices",
+ "Waar je was, je favorieten en je laatste zender, op je pc, LG en Android TV met hetzelfde abonnement. Versleuteld: zono.be kan het niet lezen.": "Where you were, your favourites and your last channel, on your PC, LG and Android TV with the same subscription. Encrypted: zono.be cannot read it.",
+ "Koppelcode (leeg: automatisch via je abonnement)": "Link code (empty: automatic through your subscription)",
+ "Deel je je abonnement met anderen, of gebruik je een afspeellijst? Maak dan een koppelcode en vul dezelfde code in op je tv (Instellingen › Koppelcode).": "Do you share your subscription, or use a playlist? Then make a link code and enter the same code on your TV (Settings › Link code).",
+ "Een koppelcode heeft 16 tekens.": "A link code has 16 characters.",
+ "Koppelcode bewaard": "Link code saved",
+ "Weer automatisch gekoppeld": "Linked automatically again",
+ "Nieuwe koppelcode": "New link code"
 }

@@ -15,6 +15,8 @@ os.environ["LOCALAPPDATA"] = str(TEMP)
 os.environ.setdefault("APPDATA", str(TEMP))
 # Tests read Dutch texts unless a run asks for another language (ZONO_LANGUAGE=fr …).
 os.environ.setdefault("ZONO_LANGUAGE", "nl")
+# never talk to the real zono.be from tests
+os.environ["ZONO_SYNC_API"] = "http://127.0.0.1:9/api/sync.php"
 
 
 def fresh_ui():

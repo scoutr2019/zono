@@ -17,7 +17,7 @@ import struct
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-API = "https://zono.be/api/sync.php"
+API = os.environ.get("ZONO_SYNC_API", "https://zono.be/api/sync.php")  # tests point this elsewhere
 VERSION = 1
 MAX_PROGRESS, MAX_FAVORITES = 300, 600
 

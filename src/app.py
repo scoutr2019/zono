@@ -29,6 +29,7 @@ import qr
 import remote
 import countries
 import tmdb
+import sync
 import ui
 import webview
 import webbrowser
@@ -284,6 +285,7 @@ class Zono:
         self.preferences = {}
         self.set_library([])
         self.favorites, self.progress, self.downloaded = {}, {}, []
+        self.sync_state, self.sync_job, self.sync_busy, self.sync_again = {}, None, False, False
         self.volume = 75
         self.tab, self.limit = "home", 30
         self.category = None
@@ -398,6 +400,7 @@ class Zono:
         self.update_info, self.update_state = None, "idle"
         root.after(12000, lambda: self.check_update(quiet=True))
         root.after(20000, self.send_ping)
+        root.after(300000, self.sync_every)
         root.after(4000, self.after_update)
         everyone = profiles["profiles"]
         last = next((p for p in everyone if p["id"] == profiles.get("last")), everyone[0])
@@ -455,6 +458,8 @@ class Zono:
         self.recordings = loaded + [r for r in running if r["id"] not in {x.get("id") for x in loaded}]
         watched = data.read_json(data.STATE.with_name("watched.json"), {})
         self.watched = watched if isinstance(watched, dict) else {}
+        linked = data.read_json(data.STATE.with_name("sync.json"), {})
+        self.sync_state = linked if isinstance(linked, dict) else {}
         self.genre_cache = data.read_json(data.STATE.with_name("genres.json"), {})
         if not isinstance(self.genre_cache, dict):
             self.genre_cache = {}
@@ -507,6 +512,7 @@ class Zono:
         if self.source and profile["id"] not in self.refreshed_profiles:
             self.refreshed_profiles.add(profile["id"])
             self.root.after(6000, lambda: self.refresh_library(silent=True, quiet_toast=True))
+        self.sync_soon(4000)  # continue watching from your other devices
 
     def blocked_words(self):
         words = [w.strip().casefold() for w in str(self.preferences.get("hidden_words", "")).split(",") if w.strip()]
@@ -2624,6 +2630,185 @@ class Zono:
                 data.log_note(f"Update zoeken lukte niet: {type(error).__name__}: {error}")
         self.run(work, done, failed)
 
+    # ---------------------------------------------------------------- linking with Zono on a TV (src/sync.py)
+    def sync_secret(self):
+        if not self.preferences.get("sync", True):
+            return ""
+        code = self.preferences.get("sync_code", "")
+        return sync.link_secret(code) if code else sync.secret_for(self.source)
+
+    def save_sync_state(self):
+        try:
+            data.write_json(data.STATE.with_name("sync.json"), self.sync_state)
+        except OSError:
+            pass
+
+    @staticmethod
+    def sync_key(item):
+        """The same title in every Zono app: "m123" (film), "e456" (episode), "l7" (channel), "s9" (series)."""
+        found = re.search(r"\|(live|movie|series|episode)\|([^|]+)$", str(item.get("id", "")))
+        if found:
+            return sync.item_key(found.group(1), found.group(2))
+        return sync.item_key("", "", item.get("url", "")) if item.get("url") else ""
+
+    def sync_profile(self):
+        profile = self.profile or {}
+        return "main" if profile.get("id", "main") == "main" else sync.profile_name(profile.get("name"))
+
+    def sync_note_favorite(self, item, on):
+        key = self.sync_key(item)
+        if key:
+            log = self.sync_state.setdefault("fav", {})
+            log[key] = {"t": int(time() * 1000), "on": on, "kind": item.get("kind", ""), "title": item.get("title", ""),
+                        "sid": str(item.get("sid", ""))}
+            self.save_sync_state()
+            self.sync_soon()
+
+    def sync_local(self):
+        part = {"progress": {}, "fav": {}, "last": None}
+        recent = time() - 60 * 86400
+        for item_id, moment in self.watched.items():  # finished here: off the other devices' lists too
+            if isinstance(moment, (int, float)) and moment > recent:
+                key = self.sync_key({"id": item_id})
+                if key:
+                    part["progress"][key] = {"t": int(moment * 1000), "done": 1}
+        for entry in self.progress.values():
+            item = entry.get("item") or {}
+            key = self.sync_key(item)
+            if not key or item.get("kind") == "catchup":
+                continue
+            stamp = int(entry.get("updated") or 0)
+            if key in part["progress"] and part["progress"][key]["t"] >= stamp:
+                continue
+            episode = "|episode|" in str(item.get("id", ""))
+            season = re.search(r"\d+", str(item.get("group", "")))
+            extension = re.search(r"\.([A-Za-z0-9]{2,4})(?:[?#]|$)", str(item.get("url", "")))
+            part["progress"][key] = {
+                "t": stamp, "pos": round(entry.get("time", 0)), "dur": round(entry.get("duration", 0)),
+                "from": entry.get("from", "pc"), "kind": "episode" if episode else item.get("kind", ""),
+                "title": item.get("title", ""), "image": item.get("image", ""), "sid": key[1:] if key[0] in "lmse" else "",
+                "ext": extension.group(1).lower() if extension else "", "season": season.group(0) if season else "",
+                "number": 0, "series": str(item.get("series_id", "") or ""), "seriesTitle": item.get("series", "") or ""}
+        log = self.sync_state.get("fav", {})
+        for item in self.favorites.values():
+            key = self.sync_key(item)
+            if key and key not in log:
+                part["fav"][key] = {"t": 0, "on": True, "kind": item.get("kind", ""), "title": item.get("title", ""),
+                                    "sid": str(item.get("sid", ""))}
+        part["fav"].update(log)
+        last = self.preferences.get("last_channel")
+        if last:
+            part["last"] = {"key": self.sync_key({"id": last}), "t": int(self.sync_state.get("last_t", 0)), "title": ""}
+        return {"v": sync.VERSION, "profiles": {self.sync_profile(): part}}
+
+    def sync_apply(self, package):
+        """Takes over what the other devices did. True when something changed here."""
+        part = (package.get("profiles") or {}).get(self.sync_profile())
+        if not isinstance(part, dict):
+            return False
+        library = {}
+        for item in self.library or []:
+            key = self.sync_key(item)
+            if key:
+                library[key] = item
+        mine = {self.sync_key(entry.get("item") or {}): item_id for item_id, entry in self.progress.items()}
+        changed = False
+        for key, entry in (part.get("progress") or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            here = mine.get(key)
+            if here and int(self.progress[here].get("updated") or 0) >= int(entry.get("t") or 0):
+                continue
+            if entry.get("done"):
+                if here:
+                    self.progress.pop(here, None)
+                    self.watched[here] = int(entry.get("t", 0) / 1000)
+                    changed = True
+                continue
+            item = library.get(key)
+            if item is None and entry.get("kind") == "episode" and entry.get("sid") and self.source:
+                base = data.server_base(self.source)
+                season = entry.get("season")
+                title = entry.get("title", "")
+                item = {"id": f"{base}|episode|{entry['sid']}", "kind": "movie", "image": entry.get("image", ""),
+                        "title": f"{entry['seriesTitle']} · {title}" if entry.get("seriesTitle") else title,
+                        "group": f"Seizoen {season}" if season else "", "series": entry.get("seriesTitle", ""),
+                        "url": data.stream_url(self.source, "series", entry["sid"], entry.get("ext") or "mp4")}
+            if item is None:
+                continue  # a title this pc's library does not have
+            if here and here != item["id"]:
+                self.progress.pop(here, None)
+            self.progress[item["id"]] = {"item": item, "time": float(entry.get("pos", 0)), "duration": float(entry.get("dur", 0)),
+                                         "updated": int(entry.get("t") or 0), "from": entry.get("from", "")}
+            changed = True
+        log = self.sync_state.setdefault("fav", {})
+        for key, entry in (part.get("fav") or {}).items():
+            if not isinstance(entry, dict) or int((log.get(key) or {}).get("t", -1)) >= int(entry.get("t") or 0):
+                continue
+            log[key] = entry
+            item = library.get(key)
+            if item is None:
+                continue
+            if entry.get("on") and item["id"] not in self.favorites:
+                self.favorites[item["id"]] = item
+                changed = True
+            elif not entry.get("on") and item["id"] in self.favorites:
+                del self.favorites[item["id"]]
+                changed = True
+        last = part.get("last")
+        if isinstance(last, dict) and int(last.get("t") or 0) > int(self.sync_state.get("last_t", 0)):
+            channel = library.get(last.get("key"))
+            if channel:
+                self.sync_state["last_t"] = int(last["t"])
+                self.remember_preference("last_channel", channel["id"])
+                changed = True
+        self.save_sync_state()
+        if changed:
+            try:
+                self.save_activity()
+            except OSError:
+                pass
+            self.save_watched()
+        return changed
+
+    def sync_now(self):
+        secret = self.sync_secret()
+        if not secret or not self.library:
+            return
+        if self.sync_busy:
+            self.sync_again = True
+            return
+        self.sync_busy = True
+        local, profile = self.sync_local(), (self.profile or {}).get("id")
+
+        def done(package):
+            self.sync_busy = False
+            if (self.profile or {}).get("id") == profile and self.sync_apply(package) and self.tab == "home" \
+                    and not self.session:
+                self.render()
+            if self.sync_again:
+                self.sync_again = False
+                self.sync_soon()
+
+        def failed(error):
+            self.sync_busy = False
+            trace(f"koppelen lukte niet: {type(error).__name__}: {error}")
+        self.run(lambda: sync.exchange(secret, local), done, failed)
+
+    def sync_soon(self, wait=6000):
+        if self.sync_job:
+            self.root.after_cancel(self.sync_job)
+        self.sync_job = self.root.after(wait, self.sync_tick)
+
+    def sync_tick(self):
+        self.sync_job = None
+        self.sync_now()
+
+    def sync_every(self):
+        if not self.session:
+            self.sync_now()
+        self.root.after(300000, self.sync_every)
+
     def send_ping(self):
         """Anonymous daily statistics (off in Instellingen › Opslag en hulp). Never bothers the user."""
         if updater.running_folder() is None and not os.environ.get("ZONO_TEST_UPDATER"):
@@ -4682,6 +4867,33 @@ class Zono:
                  lambda: webbrowser.open("https://www.opensubtitles.com/en/consumers"),
                  kind="quiet", icon="next", h=38, padx=14).pack(side="left", padx=S(10))
 
+        linked = self.panel(area, T("Je andere toestellen"))
+        self.switch_row(linked, T("Verder kijken op al je toestellen"),
+                        T("Waar je was, je favorieten en je laatste zender, op je pc, LG en Android TV met hetzelfde "
+                          "abonnement. Versleuteld: zono.be kan het niet lezen."),
+                        "sync", True, after=lambda on: self.sync_now() if on else None)
+        code_var = tk.StringVar(value=self.preferences.get("sync_code", ""))
+        self.field(linked, T("Koppelcode (leeg: automatisch via je abonnement)"), code_var, False)
+        label(linked, T("Deel je je abonnement met anderen, of gebruik je een afspeellijst? Maak dan een koppelcode en vul "
+                        "dezelfde code in op je tv (Instellingen › Koppelcode)."), 9, MUTED, PANEL, wraplength=S(640),
+              justify="left").pack(anchor="w", pady=(S(6), 0))
+        row = tk.Frame(linked, bg=PANEL)
+        row.pack(anchor="w", pady=(S(12), 0))
+
+        def save_code(value=None):
+            value = (code_var.get() if value is None else value).upper()
+            clean = "".join(ch for ch in value if ch.isalnum())
+            if clean and len(clean) != 16:
+                self.toast(T("Een koppelcode heeft 16 tekens."), "close")
+                return
+            code = "-".join(clean[i:i + 4] for i in range(0, 16, 4)) if clean else ""
+            code_var.set(code)
+            self.set_pref("sync_code", code, T("Koppelcode bewaard") if code else T("Weer automatisch gekoppeld"))
+            self.sync_now()
+        Pill(row, T("Opslaan"), save_code, kind="ghost", icon="check", h=38, padx=16).pack(side="left")
+        Pill(row, T("Nieuwe koppelcode"), lambda: save_code(sync.new_link_code()), kind="quiet", icon="refresh", h=38,
+             padx=14).pack(side="left", padx=S(10))
+
         updates = self.panel(area, T("Updates"))
         self.switch_row(updates, T("Automatisch bijwerken"),
                         T("Zono zoekt bij het starten naar een nieuwe versie, haalt die op de achtergrond binnen en vraagt "
@@ -4915,6 +5127,7 @@ class Zono:
             del self.favorites[key]
         else:
             self.favorites[key] = item
+        self.sync_note_favorite(item, not previous)
         try:
             self.save_activity()
         except OSError as error:
@@ -5480,6 +5693,10 @@ class Zono:
         self.apply_volume()
         self.autoplayed = True
         if live:
+            if self.preferences.get("last_channel") != item["id"]:
+                self.sync_state["last_t"] = int(time() * 1000)
+                self.save_sync_state()
+                self.sync_soon(30000)
             self.remember_preference("last_channel", item["id"])
         if not self.tick_job:
             self.tick_job = self.root.after(400, self.session_tick)
@@ -5763,13 +5980,14 @@ class Zono:
             self.save_watched()
         elif length > 0 and moment >= 3:
             self.progress[item["id"]] = {"item": item, "time": moment, "duration": length,
-                                         "updated": int(datetime.now().timestamp() * 1000)}
+                                         "updated": int(datetime.now().timestamp() * 1000), "from": "pc"}
         else:
             return
         try:
             self.save_activity()
         except OSError:
             pass
+        self.sync_soon()
 
     def session_tick(self):
         self.tick_job = None
