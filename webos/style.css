@@ -447,3 +447,13 @@ video::cue { font-size: 46px; background: rgba(0,0,0,.65); color: #fff; }
 /* ---- 0.7: lighter for the TV's graphics chip: no animations on rows and cards, no fades */
 .row-item, .pill, .btn, .card .pic, .who-card, .hero-bg, .hero-text, .livebar, .banner, .bar, .toast, .numbox { transition: none !important; }
 .card:focus .pic { box-shadow: 0 0 0 5px #fff; }
+
+/* the white focus ring of the first card in a row stays fully in view */
+.shelf .scroll-x { padding: 26px 30px 12px; margin: -26px -30px 0; }
+/* number and channel name never stuck together */
+.zap-num { margin-right: 14px; text-align: right; }
+.live .channels .row-item .zap-num { margin-right: 16px; }
+.lb-num, .nc-head .lb-num { margin-right: 16px; }
+.nc-name { margin-left: 0; }
+.row-item .name .sub { display: block; }
+.lb-now .lb-time { margin-right: 18px; }

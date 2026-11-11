@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "0.7.2";
+  var VERSION = "0.7.3";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
   var API = window.ZONO_API || "https://zono.be/api";
@@ -120,7 +120,7 @@
 
   // ---- heavy work runs in a worker (js/worker.js), so the screen never freezes
   var worker = null, jobs = {}, jobId = 0;
-  function work(message, onStep) {
+  function work(message, onStep, onPartial) {
     if (!worker) {
       worker = new Worker("js/worker.js");
       worker.onmessage = function (e) {
@@ -128,6 +128,7 @@
         if (!job) return;
         if (m.type === "step") { if (job.step) job.step(m.kind); return; }
         if (m.type === "chunk") { Array.prototype.push.apply(job.items, m.items); return; }
+        if (m.type === "partial") { var first = job.items; job.items = []; if (job.partial) job.partial(first); return; }
         delete jobs[m.id];
         m.items = job.items;
         if (m.type === "done") job.resolve(m); else job.reject(m);
@@ -135,14 +136,14 @@
     }
     return new Promise(function (resolve, reject) {
       var id = ++jobId;
-      jobs[id] = { resolve: resolve, reject: reject, step: onStep, items: [] };
+      jobs[id] = { resolve: resolve, reject: reject, step: onStep, partial: onPartial, items: [] };
       message.id = id;
       worker.postMessage(message);
     });
   }
   /** The whole library from the provider (read and stored by the worker). */
-  function fetchLibrary(source, step) {
-    return work({ type: "load", source: source }, step).then(function (m) {
+  function fetchLibrary(source, step, onPartial) {
+    return work({ type: "load", source: source }, step, onPartial).then(function (m) {
       if (source.type !== "xtream") save("guideUrl", m.guideUrl || "");
       save("refreshedAt", Date.now());
       return m.items;
@@ -223,7 +224,17 @@
     var began = Date.now();
     S.loading = !quiet; S.error = ""; S.step = "";
     if (!quiet) render();
-    return fetchLibrary(source, function (kind) { S.step = kind; if (!quiet) render(); }).then(function (items) {
+    var shownEarly = false;
+    // the channels come first: show them at once (films and series follow a little later)
+    function early(live) {
+      if (quiet || !live.length) return;
+      shownEarly = true;
+      S.items = live; buildShelves(); S.loading = false;
+      if (!S.source) { S.source = source; save("source", source); stopPairing(); S.choosing = needsChoice(); }
+      log("channels shown after " + Math.round((Date.now() - began) / 1000) + " s");
+      render();
+    }
+    return fetchLibrary(source, function (kind) { S.step = kind; if (!quiet && !shownEarly) render(); }, early).then(function (items) {
       S.loading = false;
       var same = quiet && S.items.length === items.length && S.items.length && S.items[0].id === items[0].id && S.items[S.items.length - 1].id === items[items.length - 1].id;
       S.items = items;
@@ -716,7 +727,7 @@
       : h("div", null, [pill(T("connect"), true, connect, "connect")]));
     return h("div", { cls: "login" }, [
       h("div", { cls: "intro" }, [h("img", { src: "img/logo.png", alt: "Zono" }), h("h1", { text: T("login_title") }),
-        h("p", { text: T("login_intro") }), phonePanel(), h("div", { cls: "note", text: T("test_build") })]),
+        h("p", { text: T("login_intro") }), phonePanel()]),
       h("div", { cls: "form" }, [h("div", { cls: "or", text: T("or_remote") })].concat(form))]);
   }
 
@@ -1378,7 +1389,7 @@
     parts.push(h("h2", { text: T("privacy"), style: "margin-top:44px" }));
     parts.push(rowItem(T("stats"), function () { save("share", !sharing()); render(); }, { trail: T(sharing() ? "on" : "off"), sub: T("stats_text"), key: "share" }));
     parts.push(rowItem(T("report"), reportSheet, { key: "report" }));
-    parts.push(h("div", { cls: "empty", style: "margin-top:44px;color:var(--dim)", text: T("version", VERSION) + " · " + T("test_build") + " · zono.be/privacy.html" }));
+    parts.push(h("div", { cls: "empty", style: "margin-top:44px;color:var(--dim)", text: T("version", VERSION) + " · zono.be/privacy.html" }));
     return h("div", { cls: "scroll-y" }, [h("div", { cls: "page", style: "max-width:1300px" }, parts)]);
   }
   /** Which countries first: the ones in this library, most channels and films first. */

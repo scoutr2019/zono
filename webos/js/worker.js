@@ -23,9 +23,9 @@ function get(url, timeout, maxBytes) {
 function json(url) { return get(url).then(function (t) { return JSON.parse(t.replace(/^﻿/, "")); }); }
 
 /** Sends a big list in pieces: one huge message would freeze the screen while it is unpacked. */
-function send(id, items, extra) {
+function send(id, items, extra, kind) {
   for (var i = 0; i < items.length; i += 2000) postMessage({ id: id, type: "chunk", items: items.slice(i, i + 2000) });
-  var done = { id: id, type: "done" };
+  var done = { id: id, type: kind || "done" };
   for (var k in extra || {}) done[k] = extra[k];
   postMessage(done);
 }
@@ -71,8 +71,8 @@ function searchKeys(items) {
 
 function load(id, source) {
   var step = function (kind) { postMessage({ id: id, type: "step", kind: kind }); };
-  var done = function (items, guideUrl) {
-    searchKeys(items);
+  var done = function (items, guideUrl, marked) {
+    if (!marked) searchKeys(items); else searchKeys(items.filter(function (i) { return i.kind !== "live"; }));
     return store("library", items).then(function () { return store("libraryVersion", 7); }).then(function () { send(id, items, { guideUrl: guideUrl || "" }); });
   };
   if (source.type !== "xtream") {
@@ -83,25 +83,32 @@ function load(id, source) {
       return done(items, Catalog.m3uGuideUrl(raw));
     });
   }
-  var all = [];
+  // everything is asked at the same time (one after the other took much longer); the channels go to the
+  // screen as soon as they are in, so you can start watching while films and series still come in
   var kinds = [["live", "live", "get_live_streams"], ["movie", "vod", "get_vod_streams"], ["series", "series", "get_series"]];
-  return json(Catalog.apiUrl(source)).then(function (account) {
-    var info = account && account.user_info;
+  var account = json(Catalog.apiUrl(source)).then(function (answer) {
+    var info = answer && answer.user_info;
     if (!info || String(info.auth) === "0") throw { code: "login" };
-    return kinds.reduce(function (chain, k) {
-      return chain.then(function () {
-        step(k[0]);
-        return json(Catalog.apiUrl(source, "get_" + k[1] + "_categories")).catch(function () { return []; }).then(function (cats) {
-          var groups = Catalog.categories(cats);
-          return json(Catalog.apiUrl(source, k[2])).then(function (rows) {
-            all = all.concat(Catalog.streams(rows, k[0], source, groups));
-          });
-        });
+  });
+  step("live");
+  var parts = kinds.map(function (k) {
+    var cats = json(Catalog.apiUrl(source, "get_" + k[1] + "_categories")).catch(function () { return []; });
+    var rows = json(Catalog.apiUrl(source, k[2]));
+    return Promise.all([cats, rows]).then(function (got) { return Catalog.streams(got[1], k[0], source, Catalog.categories(got[0])); });
+  });
+  parts[0].catch(function () {});
+  parts[1].catch(function () {});
+  parts[2].catch(function () {});
+  return account.then(function () {
+    return parts[0].then(function (live) {
+      if (live.length) { searchKeys(live); send(id, live, null, "partial"); }
+      step("movie");
+      return Promise.all(parts).then(function (lists) {
+        var all = lists[0].concat(lists[1], lists[2]);
+        if (!all.length) throw { code: "empty" };
+        return done(all, "", true);
       });
-    }, Promise.resolve());
-  }).then(function () {
-    if (!all.length) throw { code: "empty" };
-    return done(all);
+    });
   });
 }
 

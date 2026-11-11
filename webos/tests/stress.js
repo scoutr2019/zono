@@ -23,7 +23,9 @@ function epg(full) {
   }
   return JSON.stringify({ epg_listings: rows });
 }
-const server = http.createServer((req, res) => {
+const DELAY = +(process.env.DELAY || 0);
+const server = http.createServer((req, res) => setTimeout(() => answer(req, res), DELAY)).listen(8801);
+function answer(req, res) {
   const q = new URL(req.url, "http://x").searchParams, action = q.get("action");
   res.setHeader("Access-Control-Allow-Origin", "*");
   let body = "[]";
@@ -36,7 +38,7 @@ const server = http.createServer((req, res) => {
   else if (action === "get_simple_data_table") body = epg(true);
   else if (action === "get_vod_info") body = JSON.stringify({ info: { plot: "x", genre: "Drama" } });
   res.end(body);
-}).listen(8801);
+}
 const files = http.createServer((req, res) => {
   const file = path.join(ROOT, decodeURIComponent(new URL(req.url, "http://x").pathname));
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.statusCode = 404; return res.end(); }
@@ -72,8 +74,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   const key = async (k, n = 1) => { for (let i = 0; i < n; i++) { await page.keyboard.press(k); await sleep(120); } };
   await phase("first start (load everything)", async () => {
+    const t0 = Date.now();
     await page.goto("http://127.0.0.1:8802/index.html");
-    await page.waitForSelector(".shelf", { timeout: 300000 });
+    await page.waitForFunction(() => window.Zono && Zono.state.shelves.live.length > 0, null, { timeout: 300000, polling: 100 });
+    console.log("   channels on screen after " + ((Date.now() - t0) / 1000).toFixed(1) + " s");
+    await page.waitForFunction(() => window.Zono && Zono.state.shelves.movies.length > 0, null, { timeout: 300000, polling: 100 });
+    console.log("   films on screen after " + ((Date.now() - t0) / 1000).toFixed(1) + " s");
     await sleep(1500);
   });
   await phase("browse discover (10 keys)", async () => { await key("ArrowDown", 5); await key("ArrowRight", 5); });

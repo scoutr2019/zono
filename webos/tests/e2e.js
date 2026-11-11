@@ -323,11 +323,11 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   await page.evaluate(() => [...document.querySelectorAll("#sheet .row-item")][0].focus()); await key("Enter"); await sleep(600);
   check(received.report.length === 1 && received.report[0].message === "Zender 12 hapert", "a problem report reaches zono.be");
   check(!received.report[0].log.includes("geheim") && received.report[0].log.includes("/live/***/***/"), "the log has no login details");
-  check(/Zono for LG TV 0\.7\.2/.test(received.report[0].log) && /library: \d+ items, 40 channels/.test(received.report[0].log) && /memory: /.test(received.report[0].log) && /library loaded in/.test(received.report[0].log),
+  check(/Zono for LG TV \d+\.\d+\.\d+/.test(received.report[0].log) && /library: \d+ items, 40 channels/.test(received.report[0].log) && /memory: /.test(received.report[0].log) && /library loaded in/.test(received.report[0].log),
     "the report has a technical overview (version, library size, memory, load time)");
   check((await page.textContent("#toast")).includes("#42"), "the report number is shown");
   await page.evaluate(() => Zono.ping()); await sleep(400);
-  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.7.2", "anonymous daily ping");
+  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.7.3", "anonymous daily ping");
 
   // ---- restart: first profile again, film progress kept
   await page.evaluate(() => localStorage.setItem("zono.profile", JSON.stringify("main")));
