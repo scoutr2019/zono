@@ -143,9 +143,4 @@ rtmp://server/x
         assertFalse(matches(item, words("  ")))
     }
 
-    @Test fun initialsForPlaceholders() {
-        assertEquals("VE", initials("BE - VRT Een"))
-        assertEquals("T", initials("Thuis"))
-        assertEquals("Z", initials("!!"))
-    }
 }

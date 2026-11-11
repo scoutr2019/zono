@@ -4,10 +4,12 @@
 // Messages out: {id, type: "step", kind}  {id, type: "done", items, guideUrl}  {id, type: "error", code, message}
 importScripts("catalog.js", "guide.js", "countries.js");
 
+// in the Android app the provider is reached through the app itself (see MainActivity: /proxy)
+var PROXY = self.location && self.location.host === "appassets.androidplatform.net" ? self.location.origin + "/proxy?u=" : "";
 function get(url, timeout, maxBytes) {
   return new Promise(function (resolve, reject) {
     var x = new XMLHttpRequest();
-    x.open("GET", url, true);
+    x.open("GET", PROXY && /^https?:\/\//i.test(url) ? PROXY + encodeURIComponent(url) : url, true);
     x.timeout = timeout || 120000;
     if (maxBytes) x.onprogress = function (e) { if (e.loaded > maxBytes) { x.abort(); reject({ code: "big" }); } };
     x.onload = function () {

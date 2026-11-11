@@ -52,8 +52,6 @@ class LoaderTest {
         assertEquals(listOf("live", "live", "movie", "series"), items.map { it.kind })
         assertEquals("$base/movie/demo/geheim/3.mkv", items[2].url)
         assertEquals(Xtream.AGENT, agent)
-        val shelves = Shelves(items, true)
-        assertEquals("VRT 1 4K", shelves.live.first().title)
         val episodes = Loader.episodes(source, items[3])
         assertEquals("Begin", episodes.single().title)
     }

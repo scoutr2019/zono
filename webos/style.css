@@ -457,3 +457,9 @@ video::cue { font-size: 46px; background: rgba(0,0,0,.65); color: #fff; }
 .nc-name { margin-left: 0; }
 .row-item .name .sub { display: block; }
 .lb-now .lb-time { margin-right: 18px; }
+
+/* Android TV: the picture is drawn by Android's player behind (full screen) or above (small picture) the page */
+html.android #video { display: none; }
+html.android #player { background: transparent; }
+html.android.native-full, html.android.native-full body { background: transparent !important; }
+html.android.native-full #app { visibility: hidden; }

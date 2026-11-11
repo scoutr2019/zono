@@ -91,10 +91,14 @@
   var LANGS = [["", null], ["nl", "Nederlands"], ["fr", "Français"], ["en", "English"], ["de", "Deutsch"]];
 
   // ------------------------------------------------------------------ network
+  var PROXY = location.host === "appassets.androidplatform.net" ? location.origin + "/proxy?u=" : "";
+  function via(url) {
+    return PROXY && /^https?:\/\//i.test(url) && url.indexOf(location.origin) !== 0 && !/^https:\/\/(zono\.be|api\.opensubtitles\.com)\//i.test(url) ? PROXY + encodeURIComponent(url) : url;
+  }
   function request(method, url, body, headers, timeout, maxBytes) {
     return new Promise(function (resolve, reject) {
       var x = new XMLHttpRequest();
-      x.open(method, url, true);
+      x.open(method, via(url), true);
       x.timeout = timeout || 60000;
       Object.keys(headers || {}).forEach(function (k) { x.setRequestHeader(k, headers[k]); });
       if (maxBytes) x.onprogress = function (e) { if (e.loaded > maxBytes) { x.abort(); reject(new Error("too big")); } };
@@ -1589,7 +1593,8 @@
     if (S.series) { S.series = null; render(); return; }
     if (S.source && !S.choosing && S.page !== "discover") { S.page = "discover"; render(); focusFirst(".menu .sel"); return; }
     if (Date.now() - lastBack < 2500) {
-      if (window.PalmSystem && PalmSystem.platformBack) PalmSystem.platformBack(); else window.close();
+      if (window.ZonoAndroid) ZonoAndroid.exit();
+      else if (window.PalmSystem && PalmSystem.platformBack) PalmSystem.platformBack(); else window.close();
     } else { lastBack = Date.now(); toast(T("exit_hint")); }
   }
 
@@ -1625,7 +1630,8 @@
     return null;
   }
 
-  document.addEventListener("keydown", function (e) {
+  document.addEventListener("keydown", onKey);
+  function onKey(e) {
     var k = e.keyCode, d = digitOf(e), a = document.activeElement;
     if (d !== null && !(a && a.tagName === "INPUT")) {
       e.preventDefault();
@@ -1636,7 +1642,13 @@
     if (sheetOpen()) return uiKey(k, e, sheetEl);
     if (playerOpen()) { if (playerKey(k, e)) e.preventDefault(); return; }
     uiKey(k, e, app);
-  });
+  }
+  /** Keys the Android app passes on (Back, channel up/down, play/pause): handled like the LG remote's. */
+  function pressKey(code) {
+    var fake = { keyCode: code, repeat: false, preventDefault: function () {} };
+    onKey(fake);
+    if (code === KEY.OK) document.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter" }));
+  }
   document.addEventListener("keyup", function (e) {
     if (e.keyCode !== KEY.OK || (playerOpen() && !sheetOpen())) return;
     clearTimeout(okTimer);
@@ -1689,7 +1701,17 @@
 
   // ------------------------------------------------------------------ player
   var P = { queue: [], index: 0, retried: false, saveTimer: null, hideTimer: null, returnFocus: null, previous: null, programs: null, subs: null };
-  var player = document.getElementById("player"), video = document.getElementById("video");
+  // on Android TV the picture comes from Android's own player (js/native.js); on LG from the <video> element
+  var player = document.getElementById("player"), video = window.ZonoNativeVideo || document.getElementById("video");
+  /** Android: tell the native player where the picture goes (hidden, small picture, full screen). */
+  function syncVideo() {
+    if (!video.setRect) return;
+    var full = !player.hidden && !P.mini;
+    document.documentElement.classList.toggle("native-full", full);
+    if (player.hidden) video.setRect(0);
+    else if (P.mini) video.setRect(1, parseFloat(player.style.left), parseFloat(player.style.top), parseFloat(player.style.width), parseFloat(player.style.height));
+    else video.setRect(2);
+  }
   function playerOpen() { return !player.hidden && !P.mini; }
   var mini = { channel: null, slot: null, follow: null };
   /** Position of an element in page pixels (the page is laid out at 1920x1080 and zoomed as a whole). */
@@ -1701,11 +1723,12 @@
     player.style.left = at.x + "px"; player.style.top = at.y + "px";
     player.style.width = slot.offsetWidth + "px"; player.style.height = slot.offsetHeight + "px";
     mini.slot = slot;
-    if (P.mini && mini.channel === channel && player.classList.contains("mini")) return;
+    if (P.mini && mini.channel === channel && player.classList.contains("mini")) return syncVideo();
     P.mini = true; mini.channel = channel;
     player.classList.add("mini"); player.hidden = false;
     var list = S.shelves.live, index = list.indexOf(channel);
     P.queue = index >= 0 ? list : [channel]; P.index = Math.max(0, index);
+    syncVideo();
     startItem(false);
   }
   function stopMini() {
@@ -1716,12 +1739,14 @@
     clearInterval(P.saveTimer);
     video.pause(); video.removeAttribute("src"); video.load();
     player.hidden = true;
+    syncVideo();
   }
   /** From the small picture to full screen, without starting the stream again. */
   function miniToFull() {
     if (!P.mini) return;
     P.mini = false; mini.channel = null;
     player.classList.remove("mini"); player.removeAttribute("style");
+    syncVideo();
     P.returnFocus = currentKey();
     var item = current();
     save(pkey("last"), item.id); addRecent(item.id);
@@ -1737,6 +1762,7 @@
     P.queue = queue.slice(); P.index = Math.max(0, Math.min(index, queue.length - 1));
     if (!playerOpen()) P.returnFocus = currentKey();
     player.hidden = false;
+    syncVideo();
     startItem(true);
   }
 
@@ -1923,6 +1949,7 @@
     player.hidden = true;
     P.previous = null;
     hideLiveBar();
+    syncVideo();
     render();
     restoreFocus(P.returnFocus);
   }
@@ -2066,5 +2093,5 @@
   start();
   setInterval(checkReminders, 15000);
   setTimeout(ping, 20000);
-  window.Zono = { state: S, render: render, buildShelves: buildShelves, mini: mini, P: P, version: VERSION, pair: pair, checkReminders: checkReminders, ping: ping, log: LOG }; // for tests
+  window.Zono = { key: pressKey, state: S, render: render, buildShelves: buildShelves, mini: mini, P: P, version: VERSION, pair: pair, checkReminders: checkReminders, ping: ping, log: LOG }; // for tests
 })();
