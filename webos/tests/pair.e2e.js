@@ -18,8 +18,12 @@ function provider(req, res) {
   const good = q.get("username") === "jan" && q.get("password") === "geheim 123";
   const action = q.get("action");
   let body = !good ? { user_info: { auth: 0 } } : !action ? { user_info: { auth: 1 } } : action.endsWith("_categories") ? [{ category_id: "1", category_name: "BE" }]
-    : action === "get_live_streams" ? [{ name: "VRT 1", stream_id: 1, category_id: "1" }] : [];
-  res.end(JSON.stringify(body));
+    : action === "get_live_streams" ? [{ name: "VRT 1", stream_id: 1, category_id: "1" }, { name: "BE: VTM 4K", stream_id: 2, category_id: "1" }]
+    : action === "get_vod_streams" ? Array.from({ length: 30 }, (_, i) => ({ name: "Film " + i, stream_id: 100 + i, container_extension: "mkv", rating: 5 + (i % 5), added: 1700000000 + i, category_id: "1" }))
+    : action === "get_series" ? Array.from({ length: 8 }, (_, i) => ({ name: "Reeks " + i, series_id: 500 + i, rating: 7, last_modified: 1700000000 + i, category_id: "1" }))
+    : action === "get_vod_info" ? { info: { plot: "Een film.", genre: "Drama", releasedate: "2025-01-01", rating: "7.5" } } : [];
+  // films and series come in later than the channels, like with a real provider
+  setTimeout(() => res.end(JSON.stringify(body)), /vod|series/.test(action || "") ? 1500 : 0);
 }
 
 (async () => {
@@ -81,6 +85,10 @@ function provider(req, res) {
   check((await tv.evaluate(() => Zono.state.source.user)) === "jan", "the TV signed in with the details from the phone");
   check((await tv.evaluate(() => Zono.state.countries.join())) === "BE,NL", "the TV puts Belgium and the Netherlands first");
   await tv.waitForSelector(".greet h1").catch(() => {});
+  await sleep(3000); // films and series are in by now
+  await tv.screenshot({ path: path.join(os.tmpdir(), "zono-pair-discover.png") });
+  const shelves = await tv.$$eval(".shelf h2", (h) => h.map((x) => x.firstChild.textContent));
+  check(!!(await tv.$(".hero h1")) && shelves.some((t) => /movies|films/i.test(t)), "after signing in with the phone, Discover shows the banner and the film rows without a restart: " + shelves.join(" / "));
   check(/Lode$/.test(await tv.textContent(".greet h1").catch(() => "")) && (await tv.textContent('[data-key="menu-discover"]')).trim() === "Discover", "language English and 'Good …, Lode'");
   await tv.evaluate(() => { localStorage.setItem("zono.language", JSON.stringify("nl")); });
 

@@ -75,7 +75,9 @@ function load(id, source) {
   var step = function (kind) { postMessage({ id: id, type: "step", kind: kind }); };
   var done = function (items, guideUrl, marked) {
     if (!marked) searchKeys(items); else searchKeys(items.filter(function (i) { return i.kind !== "live"; }));
-    return store("library", items).then(function () { return store("libraryVersion", 7); }).then(function () { send(id, items, { guideUrl: guideUrl || "" }); });
+    // to the screen first, then stored: storing 100,000+ titles can take a while on a TV
+    send(id, items, { guideUrl: guideUrl || "" });
+    return store("library", items).then(function () { return store("libraryVersion", 7); });
   };
   if (source.type !== "xtream") {
     step("live");

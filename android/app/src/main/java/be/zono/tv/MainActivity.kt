@@ -108,6 +108,14 @@ class MainActivity : ComponentActivity() {
             settings.mediaPlaybackRequiresUserGesture = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW // channel logos and posters are often http
             settings.allowFileAccess = false
+            // the app is laid out for a 1920 x 1080 screen (like on LG): show that whole page on any TV,
+            // whatever the screen density or font size setting (otherwise everything is blown up)
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.textZoom = 100
+            settings.setSupportZoom(false)
+            settings.builtInZoomControls = false
+            setInitialScale((resources.displayMetrics.widthPixels * 100) / 1920)
             isFocusable = true
             isFocusableInTouchMode = true
             addJavascriptInterface(Bridge(), "ZonoAndroid")

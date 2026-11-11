@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "2.3.6";
+  var VERSION = "2.3.7";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
   var API = window.ZONO_API || "https://zono.be/api";
@@ -233,13 +233,13 @@
     function early(live) {
       if (quiet || !live.length) return;
       shownEarly = true;
-      S.items = live; buildShelves(); S.loading = false;
+      S.items = live; buildShelves(); S.loading = false; S.more = true;
       if (!S.source) { S.source = source; save("source", source); stopPairing(); S.choosing = needsChoice(); }
       log("channels shown after " + Math.round((Date.now() - began) / 1000) + " s");
       render();
     }
     return fetchLibrary(source, function (kind) { S.step = kind; if (!quiet && !shownEarly) render(); }, early).then(function (items) {
-      S.loading = false;
+      S.loading = false; S.more = false;
       var same = quiet && S.items.length === items.length && S.items.length && S.items[0].id === items[0].id && S.items[S.items.length - 1].id === items[items.length - 1].id;
       S.items = items;
       buildShelves();
@@ -249,7 +249,7 @@
       render();
       return true;
     }, function (problem) {
-      S.loading = false;
+      S.loading = false; S.more = false;
       log("library: " + (problem.message || problem));
       if (!quiet) S.error = problem.login ? T("error_login") : String(problem.message || problem).indexOf(T("error_empty")) === 0
         ? T("error_empty") : T("error_connect", problem.message || "?");
@@ -850,7 +850,8 @@
   }
   function heroBlock() {
     var list = heroItems();
-    if (!list.length) return null;
+    // channels are in, films and series still coming: say so instead of an empty top
+    if (!list.length) return S.more ? h("div", { cls: "hero hero-wait" }, [h("div", { cls: "spinner" }), h("span", { text: T("loading_more") })]) : null;
     if (hero.index >= list.length) hero.index = 0;
     var box = h("div", { cls: "hero" });
     var layers = [h("div", { cls: "hero-bg on" }), h("div", { cls: "hero-bg" })], front = 0;
