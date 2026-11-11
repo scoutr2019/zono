@@ -115,6 +115,7 @@ function provider(req, res) {
     return res.end(pic[1] === "poster" ? art(name, 342, 513, name) : art(name + " wide", 1280, 720));
   }
   if (url.pathname.startsWith("/api/")) return res.end('{"ok":true}');
+  if (url.pathname === "/pair") { res.setHeader("Content-Type", "application/json"); return res.end(req.method === "POST" ? '{"code":"ZONOTVDEMO","seconds":600}' : '{"wait":true}'); }
   const action = url.searchParams.get("action"), groups = ["België", "Nederland", "Sport", "Films", "Documentaire", "Kids", "Muziek"];
   let out;
   if (!action) out = { user_info: { auth: 1, status: "Active" } };
@@ -162,13 +163,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   page.on("pageerror", (e) => console.log("page error:", String(e)));
   await page.addInitScript((a) => {
     Object.defineProperty(navigator, "language", { get: () => a.lang });
-    window.ZONO_API = a.base + "/api"; window.ZONO_PAIR_API = a.base + "/nopair";
+    window.ZONO_API = a.base + "/api"; window.ZONO_PAIR_API = a.base + "/pair"; window.ZONO_PAIR_PAGE = "https://zono.be/tv/";
   }, { base: "http://" + server, lang: LANG });
   await page.goto("http://127.0.0.1:" + site.address().port + "/index.html");
   const key = async (name, times = 1) => { for (let i = 0; i < times; i++) { await page.keyboard.press(name); await sleep(90); } };
   const focusKey = (k) => page.evaluate((k) => { const el = document.querySelector('[data-key="' + k + '"]'); if (el) el.focus(); return !!el; }, k);
   const shot = async (name) => { await sleep(600); await page.screenshot({ path: path.join(OUT, name + ".png") }); console.log("picture", name); };
 
+  await page.waitForSelector("img.qr", { timeout: 8000 }).catch(() => {});
   await shot("00-login");
   await sleep(300);
   await key("ArrowDown"); await page.keyboard.type(server);
