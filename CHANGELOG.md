@@ -1,6 +1,11 @@
 # Wijzigingen
 
-## 2.4.0
+## 2.3.7
+Vanaf nu één versienummer voor Zono op Windows, LG en Android TV. (De vorige Windows-versie heette in de app 2.4.0, op GitHub v2.3.4.)
+- Updates: Zono zoekt de nieuwste release mét Windows-programma, zodat een release van de tv-apps de Windows-updates nooit meer verbergt.
+- Wat er nieuw is bij een update toont nu de juiste taal, ook als de releasetekst kopjes als "### Nederlands" gebruikt.
+
+## 2.4.0 (gepubliceerd als v2.3.4)
 - TV-gids voor M3U-afspeellijsten via XMLTV: de link uit de afspeellijst (url-tvg) of zelf ingevuld bij het koppelen.
 - Zoeken in de TV-gids: zoekresultaten tonen ook programma's van vandaag en morgen op je zenders.
 - Herinneringen: "Herinner me" bij een programma, met een melding (en knipperende taakbalk) als het begint.

@@ -45,8 +45,9 @@ def package_name(version):
 
 def replace_once(buffer, old, new):
     old_bytes, new_bytes = old.encode("utf-16-le"), new.encode("utf-16-le")
-    if buffer.count(old_bytes) != 1:
-        sys.exit(f"'{old}' komt niet precies één keer voor in de basis-exe (verkeerde --old-version?)")
+    # the launcher's copy comes first; later copies sit in the version resource, which write_resources rebuilds
+    if buffer.count(old_bytes) < 1:
+        sys.exit(f"'{old}' komt niet voor in de basis-exe (verkeerde --old-version?)")
     if len(old_bytes) != len(new_bytes):
         # the launcher stores these strings in fixed-size slots: pad a shorter version with spaces is not safe
         sys.exit(f"Versie '{new}' moet even lang zijn als '{old}' (bijvoorbeeld 2.1.1 -> 2.1.2).")
