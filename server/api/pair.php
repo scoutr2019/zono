@@ -6,9 +6,6 @@
 //  4. The TV asks every few seconds:     GET ?code=...  -> {"wait":true} or {"data":"..."} (then it is deleted)
 // The server only ever holds locked data it cannot open, for at most 10 minutes.
 require __DIR__ . '/lib.php';
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type');
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
 
 const PAIR_SECONDS = 600;
 if (!defined('PAIRS_PER_HOUR')) define('PAIRS_PER_HOUR', 30); // codes per TV address per hour, against abuse

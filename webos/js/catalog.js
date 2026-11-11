@@ -7,7 +7,10 @@
 
   /** A 4K (or better) channel, from the provider's own name or group: "4K | VRT 1", "NPO 1 UHD", "NPO 2ᵁᴴᴰ". */
   function isUhd(text) { return UHD.test(String(text || "")); }
-  function itemUhd(item) { return isUhd((item.raw || item.title) + " " + (item.group || "")); }
+  function itemUhd(item) {
+    if (item.k4 !== undefined) return item.k4 === 1;
+    return isUhd((item.raw || item.title) + " " + (item.group || ""));
+  }
 
   /** 4K first, otherwise the provider's order. */
   function uhdFirst(items) {
@@ -233,7 +236,7 @@
   function words(query) { return String(query || "").toLowerCase().split(/\s+/).filter(Boolean); }
   function matches(item, w) {
     if (!w.length) return false;
-    var t = (item.title + " " + (item.raw || "")).toLowerCase();
+    var t = item.q || (item.q = (item.title + " " + (item.raw || "")).toLowerCase());
     return w.every(function (x) { return t.indexOf(x) >= 0; });
   }
 
@@ -248,12 +251,25 @@
     var live = uhd ? uhdFirst(providerLive) : providerLive;
     var movies = all.filter(function (i) { return i.kind === "movie"; });
     var series = all.filter(function (i) { return i.kind === "series"; });
-    function newest(list) { return list.filter(function (i) { return i.added > 0; }).sort(function (a, b) { return b.added - a.added; }).slice(0, 30); }
+    /** The `n` best by `score` without sorting the whole (possibly huge) list. */
+    function top(list, score, n) {
+      var best = [];
+      for (var i = 0; i < list.length; i++) {
+        var v = score(list[i]);
+        if (!(v > 0) || (best.length === n && v <= best[n - 1].v)) continue;
+        var at = best.length;
+        while (at > 0 && best[at - 1].v < v) at--;
+        best.splice(at, 0, { v: v, item: list[i] });
+        if (best.length > n) best.pop();
+      }
+      return best.map(function (b) { return b.item; });
+    }
+    function newest(list) { return top(list, function (i) { return i.added || 0; }, 30); }
     return {
       all: all, live: live, movies: movies, series: series,
       liveGroups: groupsOf(providerLive, uhd), movieGroups: groupsOf(movies), seriesGroups: groupsOf(series),
       newMovies: newest(movies), newSeries: newest(series),
-      topMovies: movies.filter(function (i) { return i.rating >= 7; }).sort(function (a, b) { return b.rating - a.rating; }).slice(0, 30),
+      topMovies: top(movies, function (i) { return i.rating >= 7 ? i.rating : 0; }, 30),
       uhdChannels: live.filter(itemUhd).slice(0, 30),
     };
   }

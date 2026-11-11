@@ -3,6 +3,12 @@
 // only a salted hash of the address is kept, and only for one day.
 require __DIR__ . '/config.php';
 
+// Zono on a TV runs as an app, not as a page on zono.be: it may only send to this API when the API says so.
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
+
 function db(): PDO {
     static $pdo = null;
     if ($pdo) return $pdo;

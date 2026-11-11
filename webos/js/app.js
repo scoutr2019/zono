@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "0.4.0";
+  var VERSION = "0.5.0";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
   var API = window.ZONO_API || "https://zono.be/api";
@@ -104,36 +104,38 @@
   }
   function loginError() { var e = new Error(T("error_login")); e.login = true; return e; }
 
-  /** The whole library from the provider; for M3U also the guide link from the playlist. */
-  function fetchLibrary(source, step) {
-    if (source.type !== "xtream") {
-      step("live");
-      return get(source.m3u, 90000).then(function (raw) {
-        var items = Catalog.parseM3u(raw);
-        if (!items.length) throw new Error(T("error_empty"));
-        save("guideUrl", Catalog.m3uGuideUrl(raw));
-        return items;
-      });
+  // ---- heavy work runs in a worker (js/worker.js), so the screen never freezes
+  var worker = null, jobs = {}, jobId = 0;
+  function work(message, onStep) {
+    if (!worker) {
+      worker = new Worker("js/worker.js");
+      worker.onmessage = function (e) {
+        var m = e.data, job = jobs[m.id];
+        if (!job) return;
+        if (m.type === "step") { if (job.step) job.step(m.kind); return; }
+        if (m.type === "chunk") { Array.prototype.push.apply(job.items, m.items); return; }
+        delete jobs[m.id];
+        m.items = job.items;
+        if (m.type === "done") job.resolve(m); else job.reject(m);
+      };
     }
-    var all = [];
-    return json(Catalog.apiUrl(source)).then(function (account) {
-      var info = account && account.user_info;
-      if (!info || String(info.auth) === "0") throw loginError();
-      var kinds = [["live", "live", "get_live_streams"], ["movie", "vod", "get_vod_streams"], ["series", "series", "get_series"]];
-      return kinds.reduce(function (chain, k) {
-        return chain.then(function () {
-          step(k[0]);
-          return json(Catalog.apiUrl(source, "get_" + k[1] + "_categories")).catch(function () { return []; }).then(function (cats) {
-            var groups = Catalog.categories(cats);
-            return json(Catalog.apiUrl(source, k[2])).then(function (rows) {
-              all = all.concat(Catalog.streams(rows, k[0], source, groups));
-            });
-          });
-        });
-      }, Promise.resolve());
-    }).then(function () {
-      if (!all.length) throw new Error(T("error_empty"));
-      return all;
+    return new Promise(function (resolve, reject) {
+      var id = ++jobId;
+      jobs[id] = { resolve: resolve, reject: reject, step: onStep, items: [] };
+      message.id = id;
+      worker.postMessage(message);
+    });
+  }
+  /** The whole library from the provider (read and stored by the worker). */
+  function fetchLibrary(source, step) {
+    return work({ type: "load", source: source }, step).then(function (m) {
+      if (source.type !== "xtream") save("guideUrl", m.guideUrl || "");
+      save("refreshedAt", Date.now());
+      return m.items;
+    }, function (m) {
+      if (m.code === "login") throw loginError();
+      if (m.code === "empty") throw new Error(T("error_empty"));
+      throw new Error(m.message || m.code);
     });
   }
 
@@ -169,7 +171,7 @@
     loading: false, step: "", error: "",
     page: "discover", series: null, detail: null, guideFor: null,
     choosing: false, // the "who's watching?" screen
-    byId: {}, numbers: {}, pos: {},
+    byId: null, numbers: {}, pos: {},
   };
   function loadProfileData() {
     profileId = load("profile", "main");
@@ -186,12 +188,14 @@
   function buildShelves() {
     var kids = !!currentProfile().kids, hidden = {};
     S.hidden.forEach(function (h) { hidden[h] = 1; });
-    var visible = S.items.filter(function (i) {
-      if (hidden[(i.kind === "episode" ? "series" : i.kind) + "|" + i.group]) return false;
-      return !(kids && (Guide.adult(i.group) || Guide.adult(i.title)));
+    var anyHidden = S.hidden.length > 0;
+    S.hiddenSet = hidden; S.kids = kids;
+    var visible = !kids && !anyHidden ? S.items : S.items.filter(function (i) {
+      if (anyHidden && hidden[(i.kind === "episode" ? "series" : i.kind) + "|" + i.group]) return false;
+      return !(kids && (i.adult || (i.q === undefined && (Guide.adult(i.group) || Guide.adult(i.title)))));
     });
     S.shelves = Catalog.shelves(visible, S.uhd);
-    S.byId = {}; S.items.forEach(function (i) { S.byId[i.id] = i; });
+    S.byId = null; // built when first needed (see find)
     // channel numbers: the provider's own (num / tvg-chno) or the position in the list
     S.numbers = {};
     var numbered = S.shelves.live.some(function (c) { return c.num > 0; });
@@ -207,7 +211,6 @@
       var same = quiet && S.items.length === items.length && S.items.length && S.items[0].id === items[0].id && S.items[S.items.length - 1].id === items[items.length - 1].id;
       S.items = items;
       buildShelves();
-      db.put("library", items);
       if (same) return true; // nothing new: no redraw while you are browsing
       if (!S.source) { S.source = source; save("source", source); stopPairing(); S.choosing = needsChoice(); }
       render();
@@ -222,18 +225,35 @@
     });
   }
 
+  /** An item by id (a Map, built once: fast even with 100,000 titles). */
+  function find(id) {
+    if (!id) return null;
+    if (!S.byId) { S.byId = new Map(); for (var i = 0; i < S.items.length; i++) S.byId.set(S.items[i].id, S.items[i]); }
+    return S.byId.get(id) || null;
+  }
+  /** Shown in this profile? (not in a hidden group, not adult in a kids profile) */
+  function visible(i) {
+    if (!i) return false;
+    if (S.hiddenSet && S.hiddenSet[(i.kind === "episode" ? "series" : i.kind) + "|" + i.group]) return false;
+    return !(S.kids && (i.adult || Guide.adult(i.group) || Guide.adult(i.title)));
+  }
+
   function needsChoice() { var list = profiles(); return list.length > 1 || !!list[0].pin; }
 
   function start() {
     S.choosing = !!S.source && needsChoice();
     if (!S.source) return render();
     S.loading = true; render();
-    db.get("library").then(function (items) {
+    work({ type: "cache" }).then(function (m) { return m.items; }, function () { return []; }).then(function (items) {
       if (items && items.length) {
-        S.items = Catalog.tidy(items); buildShelves();
-        S.loading = false;
-        render();
-        refresh(S.source, true);
+        S.items = items;
+        setTimeout(function () {
+          buildShelves();
+          S.loading = false;
+          setTimeout(render, 0);
+        }, 0);
+        var old = !items[0].q, due = Date.now() - load("refreshedAt", 0) > 6 * 3600000;
+        if (old || due) setTimeout(function () { refresh(S.source, true); }, old ? 500 : 15000);
       } else refresh(S.source, false);
     });
   }
@@ -297,16 +317,9 @@
     xmltv.promise = db.get("xmltv").then(function (cached) {
       if (cached && cached.url === url && Date.now() - cached.at < 6 * 3600000) return cached.guide;
       if (/\.gz(\?|$)/i.test(url)) throw new Error("gz");
-      return request("GET", url, undefined, null, 180000, 120 * 1024 * 1024).then(function (text) {
-        var keep = {};
-        S.items.forEach(function (i) { if (i.kind === "live") { if (i.epg) keep[i.epg] = 1; } });
-        var guide = Guide.parseXmltv(text, null);
-        // only the library's channels are kept (by id or by name)
-        var wanted = {}; S.items.forEach(function (i) { if (i.kind === "live") { var id = Guide.channelFor(guide, i); if (id) wanted[id] = 1; } });
-        Object.keys(guide.programs).forEach(function (id) { if (!wanted[id] && !keep[id]) delete guide.programs[id]; });
-        db.put("xmltv", { url: url, at: Date.now(), guide: guide });
-        return guide;
-      });
+      var keep = [], names = [];
+      S.items.forEach(function (i) { if (i.kind === "live") { if (i.epg) keep.push(i.epg); names.push(i.tvgName || i.title); } });
+      return work({ type: "xmltv", url: url, keep: keep, names: names }).then(function (m) { return m.guide; }, function (m) { throw new Error(m.code === "big" ? "too big" : m.message); });
     }).then(function (guide) {
       xmltv.guide = guide; xmltv.state = guide ? "ready" : "failed";
       return guide;
@@ -349,7 +362,7 @@
     S.reminders.forEach(function (r) {
       if (!r.shown && r.start - now <= 60) {
         r.shown = true; changed = true;
-        var channel = S.byId && S.byId[r.channel];
+        var channel = find(r.channel);
         sheet({ title: T("reminder_title", r.title), text: T("reminder_on", r.channelTitle) + " · " + hm(r.start), items: [
           channel ? { label: T("watch_now"), go: function () { closeSheet(); playChannel(channel); } } : null,
           { label: T("close"), go: closeSheet }] });
@@ -777,6 +790,8 @@
     if (rating) { if (parts.length) line.appendChild(document.createTextNode("  ·  ")); line.appendChild(withIcon("star", String(Math.round(rating * 10) / 10), "gold")); }
     return line;
   }
+  /** Film pictures from TMDB in a TV-friendly size (the original can be 4000 pixels wide). */
+  function smaller(src) { return String(src || "").replace(/\/t\/p\/(?:original|w1280|w1920)\//, "/t/p/w780/"); }
   function preload(src, done) {
     if (!src) return done();
     var img = new Image(), called = false;
@@ -793,7 +808,7 @@
     box.appendChild(layers[0]); box.appendChild(layers[1]); box.appendChild(h("div", { cls: "hero-shade" })); box.appendChild(text); box.appendChild(dots);
     function background(layer, item, info) {
       layer.innerHTML = "";
-      var bg = info.backdrop || item.backdrop;
+      var bg = smaller(info.backdrop || item.backdrop);
       layer.appendChild(bg ? picture(bg) : item.image ? picture(item.image, "poster-bg") : placeholder(item.title));
     }
     function words(item, info) {
@@ -817,7 +832,7 @@
     words(first, hero.info[first.id] || {});
     vodInfo(first).then(function (info) {
       if (list[hero.index] !== first) return;
-      if ((info.backdrop || "") !== "") preload(info.backdrop, function () { background(layers[front], first, info); });
+      if ((info.backdrop || "") !== "") preload(smaller(info.backdrop), function () { background(layers[front], first, info); });
       words(first, info);
     });
     // the next film fades in every 9 seconds (not while you are on the banner's buttons); its picture is loaded first
@@ -827,7 +842,7 @@
       if (box.contains(document.activeElement) || playerOpen() || sheetOpen() || box.getBoundingClientRect().bottom < 100) return;
       var next = (hero.index + 1) % list.length, item = list[next];
       vodInfo(item).then(function (info) {
-        preload(info.backdrop || item.backdrop || item.image, function () {
+        preload(smaller(info.backdrop || item.backdrop) || item.image, function () {
           if (!box.parentNode || box.contains(document.activeElement)) return;
           hero.index = next;
           var back = layers[1 - front];
@@ -837,7 +852,7 @@
           setTimeout(function () { words(item, info); text.classList.remove("fade"); }, 350);
         });
       });
-    }, 9000);
+    }, 15000);
     return box;
   }
   function greeting() {
@@ -846,7 +861,7 @@
     return name ? hi + ", " + name : hi;
   }
   function lastChannelCard() {
-    var channel = S.byId && S.byId[S.recent[0] || load(pkey("last"), "")];
+    var channel = find(S.recent[0] || load(pkey("last"), ""));
     if (!channel || channel.kind !== "live") return null;
     var now = h("div", { cls: "cont-now" });
     programsFor(channel, false).then(function (rows) {
@@ -868,7 +883,7 @@
         return wide(p.item, function () { play(items, i); }, { progress: p.dur ? p.pos / p.dur : 0, sub: sub });
       })));
     }
-    var favs = S.favorites.map(function (id) { return S.byId[id]; }).filter(function (x) { return x && sh.all.indexOf(x) >= 0; });
+    var favs = S.favorites.map(find).filter(visible);
     if (favs.length) {
       var favLive = favs.filter(function (x) { return x.kind === "live"; });
       rows.push(shelf(T("favorites"), favs.map(function (x) {
@@ -876,7 +891,7 @@
           : poster(x, function () { open(x); });
       })));
     }
-    var recent = S.recent.map(function (id) { return S.byId[id]; }).filter(function (x) { return x && x.kind === "live" && sh.all.indexOf(x) >= 0; });
+    var recent = S.recent.map(find).filter(function (x) { return visible(x) && x.kind === "live"; });
     if (recent.length > 1) rows.push(shelf(T("recent_channels"), recent.map(function (c) { return wide(c, function () { playChannel(c, recent); }); })));
     if (sh.uhdChannels.length) rows.push(shelf(T("uhd_channels"), sh.uhdChannels.map(function (c) { return wide(c, function () { playChannel(c, sh.uhdChannels); }); })));
     [["new_movies", sh.newMovies], ["top_movies", sh.topMovies]].forEach(function (pair) {
@@ -931,7 +946,7 @@
     var favLive = sh.live.filter(function (c) { return isFavorite(c.id); });
     var groups = (favLive.length ? [FAV] : []).concat(sh.liveGroups);
     if (liveGroup === null || groups.indexOf(liveGroup) < 0) {
-      var found = S.byId[S.recent[0]];
+      var found = find(S.recent[0]);
       liveGroup = found && sh.liveGroups.indexOf(found.group) >= 0 ? found.group : (sh.liveGroups[0] || "");
     }
     var channels = liveGroup === FAV ? favLive : sh.live.filter(function (c) { return c.group === liveGroup; });
@@ -940,7 +955,7 @@
       var name = g === FAV ? T("favorites") : groupName(g);
       return rowItem(name, function () { liveGroup = g; render(); }, { lead: g === FAV ? icon("heartFill", "lead") : null, sel: g === liveGroup, badge: g !== FAV && Catalog.isUhd(g) ? "4K" : "", key: "g-" + g,
         long: g === FAV ? null : function () { askHide("live", g); } });
-    }, 200);
+    }, 60);
     var pane = h("div", { cls: "live-info" });
     var channelList = h("div", { cls: "scroll-y" });
     if (!channels.length) channelList.appendChild(h("div", { cls: "empty", text: T("empty_group") }));
@@ -1071,7 +1086,7 @@
       var cell = h("div", { cls: "tvg-channel", go: function () { playChannel(channel, channels); }, "data-key": "tc-" + channel.id }, [
         h("span", { cls: "num", text: String(num) }), h("div", { cls: "logo-box" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
         h("span", { cls: "cname", text: channel.title })]);
-      limited(function () { return programsFor(channel, true); }).then(function (rows) {
+      limited(function () { return programsFor(channel, TVG.day !== 0); }).then(function (rows) {
         var end = start + 86400, now = nowSeconds(), any = false;
         (rows || []).forEach(function (p) {
           if (p.end <= start || p.start >= end) return;
@@ -1112,7 +1127,8 @@
   function gridScreen(kind, items, groups, openOne) {
     var ALL = "\u0000all", current = gridGroup[kind];
     if (current !== ALL && groups.indexOf(current) < 0) current = gridGroup[kind] = ALL;
-    var shown = current === ALL ? items.slice().sort(function (a, b) { return (b.added || 0) - (a.added || 0); })
+    var cache = S.shelves._sorted || (S.shelves._sorted = {});
+    var shown = current === ALL ? (cache[kind] || (cache[kind] = items.slice().sort(function (a, b) { return (b.added || 0) - (a.added || 0); })))
       : items.filter(function (i) { return i.group === current; });
     var hideKind = kind === "movies" ? "movie" : "series";
     var pills = h("div", { cls: "scroll-x", style: "padding:12px 8px" }, [pill(T("all"), current === ALL, function () { gridGroup[kind] = ALL; render(); }, "p-all")]
@@ -1132,7 +1148,7 @@
     function draw(info) {
       var p = progressOf(item.id);
       box.innerHTML = "";
-      var bg = info.backdrop || item.backdrop;
+      var bg = smaller(info.backdrop || item.backdrop);
       box.appendChild(h("div", { cls: "hero-bg" }, [bg ? picture(bg) : (item.image ? picture(item.image, "blur") : null)]));
       box.appendChild(h("div", { cls: "hero-shade full" }));
       var buttons = [];
@@ -1215,13 +1231,20 @@
   function searchScreen() {
     var field = input(query, T("search_hint"), function (v) { query = v; clearTimeout(searchTimer); searchTimer = setTimeout(fill, 300); }, { key: "search", style: "width:1000px" });
     var results = h("div");
+    var round = 0;
     function fill() {
+      // the titles are searched in pieces of 8,000, so typing stays smooth with a huge library
+      var mine = ++round, w = Catalog.words(query), found = [], all = S.shelves.all, at = 0;
+      if (!w.length) return show(found);
+      (function piece() {
+        if (mine !== round) return;
+        var end = Math.min(all.length, at + 8000);
+        for (; at < end && found.length < 60; at++) if (Catalog.matches(all[at], w)) found.push(all[at]);
+        if (at < all.length && found.length < 60) setTimeout(piece, 0); else show(found);
+      })();
+    }
+    function show(found) {
       results.innerHTML = "";
-      var w = Catalog.words(query), found = [];
-      if (w.length) {
-        var all = S.shelves.all;
-        for (var i = 0; i < all.length && found.length < 60; i++) if (Catalog.matches(all[i], w)) found.push(all[i]);
-      }
       var live = found.filter(function (i) { return i.kind === "live"; });
       if (found.length) {
         var grid = h("div", { cls: "grid" });
@@ -1541,7 +1564,7 @@
   function numberKey(d) {
     if (d === "0" && !number.typed) {
       if (playerOpen() && P.previous) return previousChannel();
-      if (!playerOpen() && S.recent[1] && S.byId[S.recent[1]]) return playChannel(S.byId[S.recent[1]]);
+      if (!playerOpen() && find(S.recent[1])) return playChannel(find(S.recent[1]));
       return;
     }
     number.typed = (number.typed + d).slice(0, 4);
@@ -1893,5 +1916,5 @@
   start();
   setInterval(checkReminders, 15000);
   setTimeout(ping, 20000);
-  window.Zono = { state: S, render: render, version: VERSION, pair: pair, checkReminders: checkReminders, ping: ping, log: LOG }; // for tests
+  window.Zono = { state: S, render: render, buildShelves: buildShelves, version: VERSION, pair: pair, checkReminders: checkReminders, ping: ping, log: LOG }; // for tests
 })();
