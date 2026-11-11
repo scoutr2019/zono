@@ -30,3 +30,10 @@ De aangeleverde exe is nog niet goedgekeurd voor publicatie. Er wordt geen v2.2.
 - https://polyformproject.org/licenses/strict/1.0.0
 
 VideoLAN waarschuwt dat sommige modules GPL gebruiken en dat die combinatie vóór herdistributie moet worden gecontroleerd.
+
+## Zono for LG TV and zono.be/tv
+
+- **TweetNaCl.js** 1.0.3 (webos/js/vendor/nacl.min.js, server/tv/nacl.min.js) – public domain (Unlicense).
+  https://github.com/dchest/tweetnacl-js
+- **QR Code Generator for JavaScript** 1.4.4 (webos/js/vendor/qrcode.js) – Copyright (c) 2009 Kazuhiko Arase, MIT license.
+  https://github.com/kazuhikoarase/qrcode-generator

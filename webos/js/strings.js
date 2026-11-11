@@ -62,7 +62,13 @@ var STRINGS = {
   "back": "Back",
   "exit_hint": "Press Back again to close Zono",
   "live_badge": "LIVE",
-  "done": "Done"
+  "done": "Done",
+  "phone_title": "Quicker: sign in with your phone",
+  "phone_steps": "Scan this code with your phone's camera and fill in your details there.",
+  "phone_waiting": "Waiting for your phone…",
+  "phone_received": "Received from your phone",
+  "phone_unavailable": "Signing in with your phone is not possible right now.",
+  "or_remote": "Or fill it in with the remote"
  },
  "nl": {
   "nav_discover": "Ontdekken",
@@ -126,7 +132,13 @@ var STRINGS = {
   "exit_hint": "Druk nog eens op Terug om Zono te sluiten",
   "live_badge": "LIVE",
   "done": "Klaar",
-  "app_name": "Zono"
+  "app_name": "Zono",
+  "phone_title": "Sneller: log in met je gsm",
+  "phone_steps": "Scan deze code met de camera van je gsm en vul daar je gegevens in.",
+  "phone_waiting": "Wacht op je gsm…",
+  "phone_received": "Ontvangen van je gsm",
+  "phone_unavailable": "Inloggen met je gsm lukt nu niet.",
+  "or_remote": "Of vul het hier in met de afstandsbediening"
  },
  "fr": {
   "nav_discover": "Découvrir",
@@ -190,7 +202,13 @@ var STRINGS = {
   "exit_hint": "Appuyez encore sur Retour pour fermer Zono",
   "live_badge": "DIRECT",
   "done": "Terminé",
-  "app_name": "Zono"
+  "app_name": "Zono",
+  "phone_title": "Plus rapide : connectez-vous avec votre téléphone",
+  "phone_steps": "Scannez ce code avec l’appareil photo de votre téléphone et saisissez-y vos données.",
+  "phone_waiting": "En attente de votre téléphone…",
+  "phone_received": "Reçu de votre téléphone",
+  "phone_unavailable": "La connexion par téléphone est impossible pour le moment.",
+  "or_remote": "Ou saisissez-les ici avec la télécommande"
  },
  "de": {
   "nav_discover": "Entdecken",
@@ -254,7 +272,13 @@ var STRINGS = {
   "exit_hint": "Drücke noch einmal Zurück, um Zono zu schließen",
   "live_badge": "LIVE",
   "done": "Fertig",
-  "app_name": "Zono"
+  "app_name": "Zono",
+  "phone_title": "Schneller: mit dem Handy anmelden",
+  "phone_steps": "Scanne diesen Code mit der Handykamera und gib dort deine Daten ein.",
+  "phone_waiting": "Warte auf dein Handy…",
+  "phone_received": "Vom Handy empfangen",
+  "phone_unavailable": "Anmelden mit dem Handy geht gerade nicht.",
+  "or_remote": "Oder hier mit der Fernbedienung eingeben"
  }
 };
 if (typeof module !== "undefined") module.exports = STRINGS;

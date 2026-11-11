@@ -20,3 +20,9 @@ Kleine PHP-scripts voor cPanel (PHP 7.4+ met PDO SQLite, standaard bij de meeste
 | `data/` | De SQLite-database; afgeschermd met `data/.htaccess`. |
 
 Komt de e-mail niet aan, vraag dan aan Junda of PHP `mail()` toegestaan is en of `MAIL_FROM` (`noreply@zono.be`) mag versturen. De meldingen staan hoe dan ook op `stats.php`.
+
+## Log in with your phone (Zono on a TV)
+
+Upload `api/pair.php` to `public_html/api/` and the folder `tv` to `public_html/tv/` (so the page is https://zono.be/tv/).
+The TV shows a QR code; the phone page encrypts the login with a key that is only in the QR code (after `#`, so it never
+reaches the server). The server keeps the locked data for at most 10 minutes.

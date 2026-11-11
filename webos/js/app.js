@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "0.1.0";
+  var VERSION = "0.2.0";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
 
@@ -129,7 +129,7 @@
       S.loading = false;
       S.shelves = Catalog.shelves(items, S.uhd);
       db.put("library", items);
-      if (!S.source) { S.source = source; save("source", source); }
+      if (!S.source) { S.source = source; save("source", source); stopPairing(); }
       render();
       return true;
     }, function (problem) {
@@ -265,6 +265,88 @@
   }
 
   var login = { xtream: true, server: "", user: "", password: "", m3u: "", problem: "" };
+  // ---- log in with your phone: the TV shows a QR code, the phone sends the login locked with a key only this TV has
+  var PAIR_API = window.ZONO_PAIR_API || "https://zono.be/api/pair.php";
+  var PAIR_PAGE = window.ZONO_PAIR_PAGE || "https://zono.be/tv/";
+  var pair = { state: "off", url: "", code: "", key: null, poll: null, round: 0 };
+
+  function post(url, body) {
+    return new Promise(function (resolve, reject) {
+      var x = new XMLHttpRequest();
+      x.open("POST", url, true);
+      x.timeout = 15000;
+      x.setRequestHeader("Content-Type", "application/json");
+      x.onload = function () { x.status >= 200 && x.status < 300 ? resolve(JSON.parse(x.responseText)) : reject(new Error("HTTP " + x.status)); };
+      x.onerror = x.ontimeout = function () { reject(new Error("network")); };
+      x.send(JSON.stringify(body));
+    });
+  }
+  function b64url(bytes) {
+    var t = ""; for (var i = 0; i < bytes.length; i++) t += String.fromCharCode(bytes[i]);
+    return btoa(t).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function fromB64(text) {
+    var raw = atob(text), out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function utf8(bytes) { var t = ""; for (var i = 0; i < bytes.length; i++) t += String.fromCharCode(bytes[i]); return decodeURIComponent(escape(t)); }
+
+  function stopPairing() { clearTimeout(pair.poll); pair.state = "off"; pair.round++; }
+  function startPairing() {
+    if (!window.nacl || !window.qrcode) { pair.state = "failed"; return; }
+    var round = ++pair.round;
+    pair.state = "loading";
+    post(PAIR_API, { action: "new" }).then(function (answer) {
+      if (round !== pair.round) return;
+      pair.code = answer.code;
+      pair.key = nacl.randomBytes(32);
+      pair.url = PAIR_PAGE + "#" + pair.code + "." + b64url(pair.key) + "." + lang;
+      pair.state = "ready";
+      if (!S.source) render();
+      waitForPhone(round);
+    }, function () {
+      if (round !== pair.round) return;
+      pair.state = "failed";
+      if (!S.source) render();
+    });
+  }
+  function waitForPhone(round) {
+    pair.poll = setTimeout(function () {
+      if (round !== pair.round || S.source) return;
+      json(PAIR_API + "?code=" + pair.code).then(function (answer) {
+        if (round !== pair.round) return;
+        if (!answer.data) return waitForPhone(round);
+        var all = fromB64(answer.data);
+        var opened = nacl.secretbox.open(all.subarray(24), all.subarray(0, 24), pair.key);
+        var source = opened && JSON.parse(utf8(opened));
+        if (!source || (source.type !== "xtream" && source.type !== "m3u")) return startPairing();
+        stopPairing();
+        login.xtream = source.type === "xtream";
+        login.server = source.server || ""; login.user = source.user || ""; login.password = source.password || ""; login.m3u = source.m3u || "";
+        toast(T("phone_received"));
+        refresh(login.xtream ? { type: "xtream", server: login.server, user: login.user, password: login.password } : { type: "m3u", m3u: login.m3u }, false)
+          .then(function (ok) { if (!ok) startPairing(); });
+      }, function (problem) {
+        if (round !== pair.round) return;
+        if (/404/.test(problem.message)) startPairing(); // the code ran out (10 minutes): a new one
+        else waitForPhone(round);
+      });
+    }, 2500);
+  }
+  function phonePanel() {
+    if (pair.state === "off" && !S.loading) startPairing();
+    var body;
+    if (pair.state === "ready") {
+      var qr = qrcode(0, "M"); qr.addData(pair.url); qr.make();
+      body = h("img", { cls: "qr", src: qr.createDataURL(8, 3), alt: "QR" });
+    } else if (pair.state === "failed") {
+      body = h("div", { cls: "qr-off", text: T("phone_unavailable") });
+    } else body = h("div", { cls: "qr-off" }, [h("div", { cls: "spinner" })]);
+    return h("div", { cls: "phone" }, [body, h("div", { cls: "phone-text" }, [h("h2", { text: T("phone_title") }), h("div", { text: T("phone_steps") }),
+      pair.state === "ready" ? h("div", { cls: "phone-wait" }, [h("div", { cls: "dot" }), h("span", { text: T("phone_waiting") })]) : null])]);
+  }
+
   function loginScreen() {
     function input(key, placeholderText, type) {
       var el = h("input", { cls: "f", type: type || "text", placeholder: placeholderText, value: login[key], "data-key": "in-" + key,
@@ -292,8 +374,8 @@
       : h("div", null, [pill(T("connect"), true, connect, "connect")]));
     return h("div", { cls: "login" }, [
       h("div", { cls: "intro" }, [h("img", { src: "img/logo.png", alt: "Zono" }), h("h1", { text: T("login_title") }),
-        h("p", { text: T("login_intro") }), h("div", { cls: "note", text: T("test_build") })]),
-      h("div", { cls: "form" }, form)]);
+        h("p", { text: T("login_intro") }), phonePanel(), h("div", { cls: "note", text: T("test_build") })]),
+      h("div", { cls: "form" }, [h("div", { cls: "or", text: T("or_remote") })].concat(form))]);
   }
 
   var PAGES = [["discover", "nav_discover"], ["search", "nav_search"], ["live", "nav_live"], ["movies", "nav_movies"], ["series", "nav_series"], ["settings", "nav_settings"]];
@@ -780,5 +862,5 @@
   fit();
   pickLanguage();
   start();
-  window.Zono = { state: S, render: render, version: VERSION }; // for tests
+  window.Zono = { state: S, render: render, version: VERSION, pair: pair }; // for tests
 })();

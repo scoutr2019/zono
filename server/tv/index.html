@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Zono – inloggen op je tv</title>
+<style>
+  :root { --bg:#0b0b0f; --panel:#18181f; --raised:#23232b; --line:#2b2b34; --text:#f5f5f7; --muted:#9b9ba8; --accent:#5558f5; --red:#fda4af; --green:#86efac; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 460px; margin: 0 auto; padding: 28px 16px 48px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 22px; margin-bottom: 26px; }
+  .mark { width: 38px; height: 38px; border-radius: 11px; background: var(--accent); display: grid; place-items: center; font-weight: 800; color: #fff; position: relative; }
+  .mark::after { content: ""; position: absolute; right: 6px; bottom: 6px; width: 7px; height: 7px; border-radius: 50%; background: #ffcb5c; }
+  h1 { font-size: 24px; line-height: 1.2; margin: 0 0 8px; }
+  p { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--panel); border-radius: 18px; padding: 18px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tabs button { flex: 1; padding: 11px; border-radius: 999px; border: 0; background: var(--raised); color: var(--text); font: inherit; }
+  .tabs button[aria-pressed="true"] { background: var(--accent); font-weight: 600; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 6px; }
+  input { width: 100%; padding: 13px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 16px; }
+  input:focus { outline: none; border-color: #fff; }
+  .send { width: 100%; margin-top: 20px; padding: 15px; border: 0; border-radius: 999px; background: #fff; color: var(--bg); font: inherit; font-weight: 700; }
+  .send:disabled { opacity: .6; }
+  .msg { margin-top: 14px; min-height: 22px; }
+  .msg.bad { color: var(--red); } .msg.good { color: var(--green); font-weight: 600; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 22px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><div class="mark">z</div>Zono</div>
+  <h1 data-t="title"></h1>
+  <p data-t="intro"></p>
+  <div id="bad-link" class="card" hidden><span data-t="badlink"></span></div>
+  <form id="form" class="card" autocomplete="off">
+    <div class="tabs">
+      <button type="button" id="tab-x" aria-pressed="true">Xtream Codes</button>
+      <button type="button" id="tab-m" aria-pressed="false" data-t="m3u"></button>
+    </div>
+    <div id="xtream">
+      <label for="server" data-t="server"></label><input id="server" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="http://voorbeeld.com:8080">
+      <label for="user" data-t="user"></label><input id="user" autocapitalize="off" spellcheck="false">
+      <label for="password" data-t="password"></label><input id="password" type="password" autocapitalize="off">
+    </div>
+    <div id="m3u" hidden>
+      <label for="link" data-t="link"></label><input id="link" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://...">
+    </div>
+    <button class="send" id="send" type="submit" data-t="send"></button>
+    <div class="msg" id="msg" role="status"></div>
+  </form>
+  <div class="note" data-t="privacy"></div>
+</main>
+<script src="nacl.min.js"></script>
+<script>
+(function () {
+  var TEXT = {
+    nl: { title: "Log in op Zono op je tv", intro: "Vul je IPTV-gegevens in. Ze gaan versleuteld naar je tv.", m3u: "M3U-link", server: "Server", user: "Gebruikersnaam", password: "Wachtwoord", link: "Link van je M3U-afspeellijst", send: "Naar mijn tv sturen", sending: "Versturen…", done: "Klaar! Kijk nu naar je tv.", fields: "Vul alle velden in.", expired: "Deze code is verlopen. Toon een nieuwe QR-code op je tv en scan opnieuw.", failed: "Versturen lukte niet. Controleer je internet en probeer opnieuw.", badlink: "Deze link is niet volledig. Scan de QR-code op je tv opnieuw.", privacy: "Je gegevens worden op je gsm versleuteld met een sleutel die alleen je tv kent. zono.be kan ze niet lezen en wist ze na 10 minuten." },
+    fr: { title: "Connectez Zono sur votre TV", intro: "Saisissez vos données IPTV. Elles sont envoyées chiffrées à votre TV.", m3u: "Lien M3U", server: "Serveur", user: "Nom d’utilisateur", password: "Mot de passe", link: "Lien de votre playlist M3U", send: "Envoyer à ma TV", sending: "Envoi…", done: "C’est fait ! Regardez votre TV.", fields: "Remplissez tous les champs.", expired: "Ce code a expiré. Affichez un nouveau QR code sur votre TV et scannez-le à nouveau.", failed: "L’envoi a échoué. Vérifiez votre connexion et réessayez.", badlink: "Ce lien est incomplet. Scannez à nouveau le QR code sur votre TV.", privacy: "Vos données sont chiffrées sur votre téléphone avec une clé que seule votre TV connaît. zono.be ne peut pas les lire et les efface après 10 minutes." },
+    en: { title: "Sign in to Zono on your TV", intro: "Enter your IPTV details. They are sent to your TV encrypted.", m3u: "M3U link", server: "Server", user: "Username", password: "Password", link: "Link to your M3U playlist", send: "Send to my TV", sending: "Sending…", done: "Done! Now look at your TV.", fields: "Fill in all fields.", expired: "This code has expired. Show a new QR code on your TV and scan it again.", failed: "Sending failed. Check your internet connection and try again.", badlink: "This link is incomplete. Scan the QR code on your TV again.", privacy: "Your details are encrypted on your phone with a key only your TV knows. zono.be cannot read them and deletes them after 10 minutes." },
+    de: { title: "Zono auf deinem Fernseher anmelden", intro: "Gib deine IPTV-Daten ein. Sie werden verschlüsselt an deinen Fernseher gesendet.", m3u: "M3U-Link", server: "Server", user: "Benutzername", password: "Passwort", link: "Link zu deiner M3U-Playlist", send: "An meinen Fernseher senden", sending: "Wird gesendet…", done: "Fertig! Schau jetzt auf deinen Fernseher.", fields: "Fülle alle Felder aus.", expired: "Dieser Code ist abgelaufen. Zeig einen neuen QR-Code auf dem Fernseher und scanne ihn erneut.", failed: "Senden fehlgeschlagen. Prüfe deine Internetverbindung und versuche es erneut.", badlink: "Dieser Link ist unvollständig. Scanne den QR-Code auf deinem Fernseher erneut.", privacy: "Deine Daten werden auf dem Handy mit einem Schlüssel verschlüsselt, den nur dein Fernseher kennt. zono.be kann sie nicht lesen und löscht sie nach 10 Minuten." }
+  };
+  var lang = (navigator.language || "nl").slice(0, 2).toLowerCase();
+  var params = location.hash.slice(1).split(".");
+  if (params[2] && TEXT[params[2]]) lang = params[2]; // the TV's language
+  if (!TEXT[lang]) lang = "en";
+  var T = TEXT[lang];
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-t]").forEach(function (el) { el.textContent = T[el.getAttribute("data-t")]; });
+
+  function fromB64url(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "=";
+    return nacl.util ? nacl.util.decodeBase64(s) : Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); });
+  }
+  function toB64(bytes) { var s = ""; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s); }
+
+  var code = params[0] || "", key = null;
+  try { key = fromB64url(params[1] || ""); } catch (e) { key = null; }
+  // the link is not needed any more: keep the key out of the browser history
+  history.replaceState(null, "", location.pathname);
+  if (!/^[A-Z2-7]{10}$/.test(code) || !key || key.length !== 32) {
+    document.getElementById("form").hidden = true;
+    document.getElementById("bad-link").hidden = false;
+    return;
+  }
+
+  var xtream = true, $ = function (id) { return document.getElementById(id); };
+  function tab(on) { xtream = on; $("tab-x").setAttribute("aria-pressed", on); $("tab-m").setAttribute("aria-pressed", !on); $("xtream").hidden = !on; $("m3u").hidden = on; }
+  $("tab-x").onclick = function () { tab(true); };
+  $("tab-m").onclick = function () { tab(false); };
+  function say(text, kind) { var m = $("msg"); m.textContent = text; m.className = "msg " + (kind || ""); }
+
+  $("form").onsubmit = function (e) {
+    e.preventDefault();
+    var login = xtream ? { type: "xtream", server: $("server").value.trim(), user: $("user").value.trim(), password: $("password").value }
+      : { type: "m3u", m3u: $("link").value.trim() };
+    if (xtream ? !(login.server && login.user && login.password) : !/^https?:\/\//i.test(login.m3u)) return say(T.fields, "bad");
+    var nonce = nacl.randomBytes(24);
+    var box = nacl.secretbox(new TextEncoder().encode(JSON.stringify(login)), nonce, key);
+    var data = new Uint8Array(nonce.length + box.length); data.set(nonce); data.set(box, nonce.length);
+    $("send").disabled = true; say(T.sending);
+    fetch("/api/pair.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", code: code, data: toB64(data) }) })
+      .then(function (r) {
+        if (r.ok) { say(T.done, "good"); $("password").value = ""; return; }
+        $("send").disabled = false; say(r.status === 404 ? T.expired : T.failed, "bad");
+      }, function () { $("send").disabled = false; say(T.failed, "bad"); });
+  };
+})();
+</script>
+</body>
+</html>
