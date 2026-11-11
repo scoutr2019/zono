@@ -85,18 +85,48 @@ h3{font-size:22px;font-weight:800;letter-spacing:-.01em}
 @keyframes nudge{0%,100%{transform:none}30%{transform:translateY(-5px) rotate(-6deg)}60%{transform:translateY(0) rotate(4deg)}}
 @keyframes timer{from{width:0}to{width:100%}}
 
-/* ---- choose your screen */
-.devices{padding:110px 0 90px}
-.devices .intro{display:flex;justify-content:space-between;align-items:end;gap:30px;margin-bottom:46px}
+/* ---- choose your screen: three tiles, each with the real device and the real Zono screen */
+.devices{padding:110px 0 100px}
+.devices .intro{display:flex;justify-content:space-between;align-items:end;gap:30px;margin-bottom:44px}
 .devices .intro p{max-width:420px;color:var(--muted)}
-.row{display:grid;grid-template-columns:repeat(3,1fr);border-top:2px solid var(--ink)}
-.device{padding:30px 30px 34px 0;display:flex;flex-direction:column;gap:14px}
-.device + .device{padding-left:30px;border-left:1px solid var(--line)}
-.device .icon{width:46px;height:46px;color:var(--violet)}
-.device p{color:var(--muted);font-size:16px;flex:1}
-.device .version{font-size:13px;color:var(--muted);min-height:1.5em}
-.device .btns{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
-.device code{font:700 15px/1 var(--display);background:#e9e8ff;color:var(--violet);border-radius:7px;padding:3px 7px}
+.row{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.device{position:relative;display:flex;flex-direction:column;background:#fff;border-radius:26px;overflow:hidden;
+  box-shadow:0 1px 0 rgba(29,26,63,.06),0 22px 50px -24px rgba(29,26,63,.35);transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s}
+.device:hover{transform:translateY(-6px);box-shadow:0 1px 0 rgba(29,26,63,.06),0 34px 70px -28px rgba(29,26,63,.5)}
+.device .scene{position:relative;height:250px;display:flex;align-items:flex-end;justify-content:center;padding:0 26px;overflow:hidden;
+  background:radial-gradient(420px 220px at 50% 115%,var(--glow) 0,transparent 70%),linear-gradient(160deg,#211d52,#16133a 70%)}
+.device.win{--glow:rgba(140,138,252,.55)}
+.device.lg{--glow:rgba(255,92,140,.45)}
+.device.android{--glow:rgba(62,220,170,.4)}
+.device .ver{position:absolute;top:18px;right:18px;font:700 12px/1 var(--text);color:#fff;background:rgba(255,255,255,.13);border-radius:999px;padding:7px 10px;backdrop-filter:blur(6px)}
+.device .ver:empty{display:none}
+/* the devices, drawn */
+.mini-laptop{width:84%;margin-bottom:26px;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+.mini-laptop .lid{background:#07061a;border-radius:10px 10px 0 0;padding:6px;box-shadow:0 0 0 1px rgba(255,255,255,.08)}
+.mini-laptop .lid img{border-radius:3px;aspect-ratio:16/10;object-fit:cover;object-position:left top;width:100%}
+.mini-laptop .deck{height:10px;margin:0 -7%;background:linear-gradient(#d9d7f2,#9894c9);border-radius:0 0 10px 10px;position:relative}
+.mini-laptop .deck::after{content:"";position:absolute;left:42%;right:42%;top:0;height:4px;background:#8a86bd;border-radius:0 0 6px 6px}
+.mini-tv{width:88%;margin-bottom:22px;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+.mini-tv .bezel{background:#05040f;border-radius:8px;padding:5px;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
+.mini-tv .bezel img{border-radius:3px;aspect-ratio:16/9;object-fit:cover;width:100%}
+.mini-tv.feet .stand{display:flex;justify-content:space-between;padding:0 14%}
+.mini-tv.feet .stand i{width:26px;height:14px;border-left:3px solid #8f8cc0;border-bottom:3px solid #8f8cc0;transform:skewX(-25deg)}
+.mini-tv.feet .stand i:last-child{transform:skewX(25deg) scaleX(-1)}
+.mini-tv.pedestal .stand{width:28%;height:12px;margin:0 auto;background:linear-gradient(#5d59a0,#2b2866);border-radius:0 0 8px 8px}
+.remote{position:absolute;right:30px;bottom:18px;width:26px;height:78px;border-radius:13px;background:linear-gradient(#2c2868,#1a1745);box-shadow:0 8px 18px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.12);transform:rotate(14deg);transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+.remote::before{content:"";position:absolute;left:7px;top:9px;width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4)}
+.remote::after{content:"";position:absolute;left:10px;top:30px;width:6px;height:6px;border-radius:50%;background:var(--sun);box-shadow:0 12px 0 rgba(255,255,255,.3),0 22px 0 rgba(255,255,255,.3)}
+.device:hover .mini-laptop,.device:hover .mini-tv{transform:translateY(-6px) scale(1.03)}
+.device:hover .remote{transform:rotate(4deg) translateY(-6px)}
+/* the words */
+.device .body{display:flex;flex-direction:column;gap:12px;padding:26px 28px 28px;flex:1}
+.device h3{font-size:26px}
+.device p{color:var(--muted);font-size:16.5px;flex:1}
+.device code{font:800 15px/1 var(--display);background:#ecebff;color:var(--violet);border-radius:7px;padding:3px 7px}
+.device .actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin-top:6px}
+.device .btn.violet{padding:15px 22px}
+.device .how{font-weight:700;font-size:15px;color:var(--violet);text-decoration:none}
+.device .how:hover{text-decoration:underline}
 
 /* ---- continue elsewhere */
 .together{background:var(--night);color:#fff;padding:110px 0;position:relative;overflow:hidden}
@@ -139,7 +169,7 @@ h3{font-size:22px;font-weight:800;letter-spacing:-.01em}
 .stage .panel{background:#05040f;border-radius:16px;padding:10px;box-shadow:0 30px 60px rgba(22,19,58,.25)}
 .stage img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:7px;background:#0d0b22}
 .stage .foot{width:30%;height:14px;margin:0 auto;background:linear-gradient(#cfcdea,#9a97c6);border-radius:0 0 10px 10px}
-.more{display:grid;grid-template-columns:repeat(4,1fr);gap:22px 34px;margin-top:56px;padding-top:34px;border-top:2px solid var(--ink)}
+.more{display:grid;grid-template-columns:repeat(3,1fr);gap:22px 34px;margin-top:56px;padding-top:34px;border-top:2px solid var(--ink)}
 .more div{display:grid;grid-template-columns:30px 1fr;gap:12px}
 .more svg{width:24px;height:24px;color:var(--violet);margin-top:3px}
 .more b{display:block;font-weight:700}
@@ -173,9 +203,7 @@ h3{font-size:22px;font-weight:800;letter-spacing:-.01em}
   .hero{padding:120px 0 80px}
   .hero .wrap,.together .wrap,.tour .wrap,.faq .wrap{grid-template-columns:1fr;gap:46px}
   .devices .intro{flex-direction:column;align-items:start}
-  .row{grid-template-columns:1fr}
-  .device,.device + .device{padding:28px 0;border-left:0;border-top:1px solid var(--line)}
-  .device:first-child{border-top:0}
+  .row{grid-template-columns:1fr;gap:18px;max-width:520px}
   .stage{position:static}
   .more{grid-template-columns:1fr 1fr}
   .release-row{grid-template-columns:1fr;gap:12px}
@@ -252,27 +280,40 @@ h3{font-size:22px;font-weight:800;letter-spacing:-.01em}
     <div class="wrap">
       <div class="intro"><h2 data-t="devicesTitle"></h2><p data-t="devicesLead"></p></div>
       <div class="row reveal">
-        <div class="device">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M1.5 19.5h21"/></svg>
-          <h3>Windows</h3>
-          <p data-t="winText"></p>
-          <div class="version" id="v-windows"></div>
-          <div class="btns"><a class="btn violet" href="https://github.com/scoutr2019/zono/releases/download/v2.3.8/Zono-Setup.zip" data-download data-t="download"></a><a class="btn quiet" href="#vragen" data-open="0" data-t="howTo"></a></div>
-        </div>
-        <div class="device">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M7 21h10"/><circle cx="12" cy="10.5" r="3"/></svg>
-          <h3>LG</h3>
-          <p data-t="lgText"></p>
-          <div class="version" id="v-lg"></div>
-          <div class="btns"><a class="btn violet" href="lg/" data-t="download"></a><a class="btn quiet" href="apps/#lg" data-t="howTo"></a></div>
-        </div>
-        <div class="device">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/></svg>
-          <h3>Android TV</h3>
-          <p data-t="androidText"></p>
-          <div class="version" id="v-android"></div>
-          <div class="btns"><a class="btn violet" href="apk/" data-t="download"></a><a class="btn quiet" href="apps/#android" data-t="howTo"></a></div>
-        </div>
+        <article class="device win">
+          <div class="scene" aria-hidden="true">
+            <span class="ver" id="v-windows"></span>
+            <div class="mini-laptop"><div class="lid"><img id="win-shot" alt="" width="1672" height="941" loading="lazy"></div><div class="deck"></div></div>
+          </div>
+          <div class="body">
+            <h3>Windows</h3>
+            <p data-t="winText"></p>
+            <div class="actions"><a class="btn violet" href="https://github.com/scoutr2019/zono/releases/download/v2.3.8/Zono-Setup.zip" data-download ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span data-t="getWin"></span></a><a class="how" href="#vragen" data-open="0" data-t="howTo"></a></div>
+          </div>
+        </article>
+        <article class="device lg">
+          <div class="scene" aria-hidden="true">
+            <span class="ver" id="v-lg"></span>
+            <div class="mini-tv feet"><div class="bezel"><img id="lg-shot" alt="" width="1600" height="900" loading="lazy"></div><div class="stand"><i></i><i></i></div></div>
+          </div>
+          <div class="body">
+            <h3>LG</h3>
+            <p data-t="lgText"></p>
+            <div class="actions"><a class="btn violet" href="lg/" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span data-t="getLg"></span></a><a class="how" href="apps/#lg" data-t="howTo"></a></div>
+          </div>
+        </article>
+        <article class="device android">
+          <div class="scene" aria-hidden="true">
+            <span class="ver" id="v-android"></span>
+            <div class="mini-tv pedestal"><div class="bezel"><img id="android-shot" alt="" width="1600" height="900" loading="lazy"></div><div class="stand"></div></div>
+            <div class="remote"></div>
+          </div>
+          <div class="body">
+            <h3>Android TV</h3>
+            <p data-t="androidText"></p>
+            <div class="actions"><a class="btn violet" href="apk/" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span data-t="getAndroid"></span></a><a class="how" href="apps/#android" data-t="howTo"></a></div>
+          </div>
+        </article>
       </div>
     </div>
   </section>
@@ -361,7 +402,7 @@ nl: {
   winText: "Voor Windows 10 en 11. Snel geïnstalleerd. Nieuwe versies komen vanzelf.",
   lgText: "Voor LG-tv's vanaf 2018. Je zet de app één keer op je tv, met de hulp van je pc.",
   androidText: "Voor tv's met Google TV of Android TV, zoals TCL, Sony en Philips. Ook voor Android-boxen en Fire TV. Typ <code>zono.be/apk</code> in de app Downloader.",
-  download: "Downloaden", howTo: "Hoe installeren?", version: "Versie {0} · {1}",
+  download: "Downloaden", getWin: "Download voor Windows", getLg: "Download voor LG", getAndroid: "Download voor Android TV", howTo: "Hoe installeren?", version: "Versie {0} · {1}",
   togetherTitle: "Stop op je pc. Kijk verder op je tv.",
   togetherLead: "Zet je film op pauze op je pc. Zet daarna je tv aan. De film staat klaar bij Verder kijken, op precies dezelfde plek. Dat werkt ook omgekeerd.",
   t1: "<b>Verder kijken</b> werkt op Windows, LG en Android TV. Heb je iets uitgekeken? Dan verdwijnt het overal uit de lijst.",
@@ -369,13 +410,13 @@ nl: {
   t3: "<b>Veilig.</b> Alles gaat op slot op je eigen toestel. Wij kunnen niet zien wat je kijkt.",
   cardPc: "gepauzeerd op je pc om 21:40", cardTv: "klaar op je tv, verder vanaf 21:40",
   tourTitle: "Gemaakt voor in de zetel.",
-  tour: [["discover", "Ontdekken", "De top 10 en nieuwe films en series. Zenders uit je eigen land eerst."],
+  tour: [["login", "Inloggen met je gsm", "Scan de QR-code op je tv. Typ je gegevens op je gsm, niet met de afstandsbediening."],
+    ["discover", "Ontdekken", "De top 10 en nieuwe films en series. Zenders uit je eigen land eerst."],
     ["live", "Live tv", "Je zenders per groep. In een klein beeld zie je wat er nu speelt."],
     ["guide", "Tv-gids", "Kijk in de gids. Je zender speelt rechtsboven gewoon verder."],
     ["film", "Films en series", "Alle info over een film of serie. Kijk verder waar je was, met ondertitels."],
     ["fullscreen", "Volledig scherm", "Zap met de pijltjes of met het nummer van de zender. Onderaan zie je wat er speelt."]],
-  more: [["phone", "Inloggen met je gsm", "Scan de QR-code op je tv. Typ je gegevens op je gsm, niet met de afstandsbediening."],
-    ["users", "Profielen", "Iedereen zijn eigen lijst. Met pincode en een profiel voor kinderen."],
+  more: [["users", "Profielen", "Iedereen zijn eigen lijst. Met pincode en een profiel voor kinderen."],
     ["subs", "Ondertitels", "Zoek ondertitels in je eigen taal."],
     ["fast", "Snel", "Ook met heel veel zenders en films. Je zenders staan meteen klaar."]],
   newsTitle: "Nieuw in Zono", newsMore: "Alle versies op GitHub", latest: "Nieuwste", locale: "nl-BE", forWin: "Windows", forTv: "LG en Android TV", forAll: "Alle apps",
@@ -398,7 +439,7 @@ fr: {
   winText: "Pour Windows 10 et 11. Installation sans droits administrateur ; les nouvelles versions arrivent toutes seules.",
   lgText: "Pour les télés LG depuis 2018 (webOS). Installation unique avec votre PC et un compte LG gratuit.",
   androidText: "Pour Google TV et Android TV : TCL, Sony, Philips, box Android et Fire TV. Tapez <code>zono.be/apk</code> dans l'application Downloader.",
-  download: "Télécharger", howTo: "Comment l'installer", version: "Version {0} · {1}",
+  download: "Télécharger", getWin: "Télécharger pour Windows", getLg: "Télécharger pour LG", getAndroid: "Télécharger pour Android TV", howTo: "Comment l'installer", version: "Version {0} · {1}",
   togetherTitle: "Commencez ici, continuez là-bas.",
   togetherLead: "Mettez le film en pause sur le PC et allumez la télé : il vous attend dans Reprendre, à la seconde près. Et inversement.",
   t1: "<b>La reprise suit</b> entre Windows, LG et Android TV. Ce que vous avez terminé disparaît partout.",
@@ -406,13 +447,13 @@ fr: {
   t3: "<b>Chiffré sur votre appareil.</b> zono.be ne garde qu'un coffre qu'il ne peut pas ouvrir et ne voit jamais ce que vous regardez.",
   cardPc: "en pause sur le PC, 21:40", cardTv: "prêt sur la télé · reprise à 21:40",
   tourTitle: "Fait pour le canapé.",
-  tour: [["discover", "Découvrir", "Top 10, nouveaux films et séries, et vos pays en premier."],
+  tour: [["login", "Connexion avec le téléphone", "Scannez le code QR sur la télé. Tapez vos données sur le téléphone, pas avec la télécommande."],
+    ["discover", "Découvrir", "Top 10, nouveaux films et séries, et vos pays en premier."],
     ["live", "TV en direct", "Les chaînes par groupe, avec ce qui passe maintenant et ensuite dans une petite image."],
     ["guide", "Guide TV", "Parcourez le guide pendant que votre chaîne continue en haut à droite."],
     ["film", "Films et séries", "Tout sur un titre, la reprise là où vous étiez, et les sous-titres."],
     ["fullscreen", "Plein écran", "Zappez avec les flèches ou les numéros, avec une barre qui dit ce qui passe."]],
-  more: [["phone", "Connexion avec votre téléphone", "Scannez le code QR sur la télé et tapez vos données sur le téléphone, pas avec la télécommande."],
-    ["users", "Profils", "Chacun sa liste, avec code PIN et un profil enfant."],
+  more: [["users", "Profils", "Chacun sa liste, avec code PIN et un profil enfant."],
     ["subs", "Sous-titres", "Recherche via OpenSubtitles, dans votre langue."],
     ["fast", "Rapide, même avec de grandes bibliothèques", "Des dizaines de milliers de chaînes et de films : vos chaînes sont prêtes tout de suite."]],
   newsTitle: "Quoi de neuf", newsMore: "Toutes les versions sur GitHub", latest: "Nouveau", locale: "fr-BE", forWin: "Windows", forTv: "LG et Android TV", forAll: "Toutes les applis",
@@ -435,7 +476,7 @@ en: {
   winText: "For Windows 10 and 11. Installs without administrator rights; new versions arrive by themselves.",
   lgText: "For LG TVs from 2018 (webOS). You install it once with your PC and a free LG account.",
   androidText: "For Google TV and Android TV: TCL, Sony, Philips, Android boxes and Fire TV. Type <code>zono.be/apk</code> in the Downloader app.",
-  download: "Download", howTo: "How to install", version: "Version {0} · {1}",
+  download: "Download", getWin: "Download for Windows", getLg: "Download for LG", getAndroid: "Download for Android TV", howTo: "How to install", version: "Version {0} · {1}",
   togetherTitle: "Start here, carry on there.",
   togetherLead: "Pause the film on your PC and switch on the TV: it's waiting under Continue watching, at the same second. And the other way round.",
   t1: "<b>Continue watching follows you</b> between Windows, LG and Android TV. What you finished disappears everywhere.",
@@ -443,13 +484,13 @@ en: {
   t3: "<b>Encrypted on your own device.</b> zono.be only keeps a lock it cannot open itself, and never sees what you watch.",
   cardPc: "paused on your PC, 21:40", cardTv: "ready on your TV · from 21:40",
   tourTitle: "Made for the sofa.",
-  tour: [["discover", "Discover", "Top 10, new films and series, and your own countries first."],
+  tour: [["login", "Sign in with your phone", "Scan the QR code on your TV. Type your details on your phone, not with the remote."],
+    ["discover", "Discover", "Top 10, new films and series, and your own countries first."],
     ["live", "Live TV", "Channels by group, with what's on now and next in a small picture."],
     ["guide", "TV guide", "Browse the guide while your channel keeps playing top right."],
     ["film", "Films and series", "Everything about a title, continue where you were, and subtitles."],
     ["fullscreen", "Full screen", "Zap with the arrows or channel numbers, with a bar that tells you what's on."]],
-  more: [["phone", "Sign in with your phone", "Scan the QR code on your TV and type your details on your phone, not with the remote."],
-    ["users", "Profiles", "Everyone their own list, with a PIN and a kids profile."],
+  more: [["users", "Profiles", "Everyone their own list, with a PIN and a kids profile."],
     ["subs", "Subtitles", "Found via OpenSubtitles, in your own language."],
     ["fast", "Fast, even with big libraries", "Tens of thousands of channels and films: your channels are ready straight away."]],
   newsTitle: "What's new", newsMore: "Every version on GitHub", latest: "Latest", locale: "en-GB", forWin: "Windows", forTv: "LG and Android TV", forAll: "All apps",
@@ -472,7 +513,7 @@ de: {
   winText: "Für Windows 10 und 11. Installation ohne Administratorrechte; neue Versionen kommen von selbst.",
   lgText: "Für LG-Fernseher ab 2018 (webOS). Einmalig mit deinem PC und einem kostenlosen LG-Konto installieren.",
   androidText: "Für Google TV und Android TV: TCL, Sony, Philips, Android-Boxen und Fire TV. Gib <code>zono.be/apk</code> in der App Downloader ein.",
-  download: "Herunterladen", howTo: "So installierst du es", version: "Version {0} · {1}",
+  download: "Herunterladen", getWin: "Für Windows laden", getLg: "Für LG laden", getAndroid: "Für Android TV laden", howTo: "So installierst du es", version: "Version {0} · {1}",
   togetherTitle: "Hier anfangen, dort weiterschauen.",
   togetherLead: "Pausiere den Film am PC und schalte den Fernseher ein: Er wartet unter Weiterschauen, auf die Sekunde genau. Auch umgekehrt.",
   t1: "<b>Weiterschauen geht mit</b> zwischen Windows, LG und Android TV. Was du zu Ende geschaut hast, verschwindet überall.",
@@ -480,13 +521,13 @@ de: {
   t3: "<b>Verschlüsselt auf deinem Gerät.</b> zono.be bewahrt nur ein Schloss auf, das es selbst nicht öffnen kann, und sieht nie, was du schaust.",
   cardPc: "am PC pausiert, 21:40", cardTv: "bereit auf dem Fernseher · ab 21:40",
   tourTitle: "Gemacht für das Sofa.",
-  tour: [["discover", "Entdecken", "Top 10, neue Filme und Serien, und deine Länder zuerst."],
+  tour: [["login", "Mit dem Handy anmelden", "Scanne den QR-Code auf dem Fernseher. Gib deine Daten am Handy ein, nicht mit der Fernbedienung."],
+    ["discover", "Entdecken", "Top 10, neue Filme und Serien, und deine Länder zuerst."],
     ["live", "Live-TV", "Sender nach Gruppen, mit dem, was jetzt und danach läuft, in einem kleinen Bild."],
     ["guide", "TV-Programm", "Blättere durchs Programm, während dein Sender oben rechts weiterläuft."],
     ["film", "Filme und Serien", "Alles über einen Titel, Weiterschauen, wo du warst, und Untertitel."],
     ["fullscreen", "Vollbild", "Umschalten mit den Pfeilen oder Sendernummern, mit einer Leiste, die sagt, was läuft."]],
-  more: [["phone", "Mit dem Handy anmelden", "QR-Code auf dem Fernseher scannen und die Daten am Handy eingeben, nicht mit der Fernbedienung."],
-    ["users", "Profile", "Jeder seine eigene Liste, mit PIN und einem Kinderprofil."],
+  more: [["users", "Profile", "Jeder seine eigene Liste, mit PIN und einem Kinderprofil."],
     ["subs", "Untertitel", "Über OpenSubtitles, in deiner Sprache."],
     ["fast", "Schnell, auch mit großen Bibliotheken", "Zehntausende Sender und Filme: deine Sender sind sofort bereit."]],
   newsTitle: "Was ist neu", newsMore: "Alle Versionen auf GitHub", latest: "Neueste", locale: "de-DE", forWin: "Windows", forTv: "LG und Android TV", forAll: "Alle Apps",
@@ -513,6 +554,10 @@ function render() {
   document.querySelectorAll("[data-t]").forEach(function (el) { el.innerHTML = t[el.getAttribute("data-t")]; });
   document.getElementById("pc-shot").src = "img/zono-collection-" + (lang === "nl" ? "v2" : lang) + ".webp";
   document.getElementById("tv-shot").src = PICS + lang + "/discover.jpg";
+  var front = document.getElementById("tv-next"); front.classList.remove("on"); front.removeAttribute("src"); // no old language left on the tv
+  document.getElementById("win-shot").src = "img/zono-guide-" + (lang === "nl" ? "v2" : lang) + ".webp";
+  document.getElementById("lg-shot").src = PICS + lang + "/live.jpg";
+  document.getElementById("android-shot").src = PICS + lang + "/film.jpg";
   document.getElementById("steps").innerHTML = t.tour.map(function (s, i) {
     return '<li><button type="button" data-shot="' + i + '" aria-pressed="' + (i === shot) + '"><b>' + s[1] + "</b><span>" + s[2] + '</span></button><i class="timer"></i></li>';
   }).join("");
@@ -548,13 +593,12 @@ function versions() {
   var t = T[lang];
   if (windows) {
     var v = String(windows.tag_name).replace(/^v/i, ""), line = fill(t.version, v, when(windows.published_at));
-    document.getElementById("v-windows").textContent = line;
+    document.getElementById("v-windows").textContent = v;
     document.getElementById("release").textContent = "Windows " + line.charAt(0).toLowerCase() + line.slice(1);
   }
   if (tv) {
-    var tvLine = fill(t.version, tv.version, when(tv.date + "T12:00:00"));
-    document.getElementById("v-lg").textContent = tvLine;
-    document.getElementById("v-android").textContent = tvLine;
+    document.getElementById("v-lg").textContent = tv.version;
+    document.getElementById("v-android").textContent = tv.version;
   }
 }
 /* release text: bullets per language under "### NL" or "### Nederlands" (and FR, EN, DE) */
@@ -608,8 +652,9 @@ function news() {
     setInterval(function () {
       if (document.hidden) return;
       at = (at + 1) % names.length;
-      var url = PICS + lang + "/" + names[at] + ".jpg", pre = new Image();
+      var url = PICS + lang + "/" + names[at] + ".jpg", pre = new Image(), asked = lang;
       pre.onload = function () {
+        if (asked !== lang) return; // the language changed meanwhile
         if (front.classList.contains("on")) { document.getElementById("tv-shot").src = url; front.classList.remove("on"); }
         else { front.src = url; front.classList.add("on"); }
       };
