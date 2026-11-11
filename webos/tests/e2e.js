@@ -255,6 +255,15 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check(!(await page.isVisible("#sheet")) && (await page.isVisible("#player")), "Back closes only the list");
   await key("Escape"); await sleep(200);
 
+  // ---- Discover: the "continue with" channel under the greeting can be reached with the arrows
+  await focusKey("menu-discover"); await key("Enter"); await sleep(400);
+  await focusKey("hero-play"); await key("ArrowDown"); await sleep(150);
+  check((await page.evaluate(() => document.activeElement.getAttribute("data-key"))) === "cont-play", "↓ from the banner goes to the 'continue with' channel");
+  await shot("01b-continue");
+  await key("Enter"); await sleep(600);
+  check(await page.evaluate(() => !document.getElementById("player").hidden && !document.getElementById("player").classList.contains("mini")), "OK on it plays that channel");
+  await key("Escape"); await sleep(1200);
+
   // ---- films: subtitles from OpenSubtitles
   await focusKey("menu-movies"); await key("Enter"); await sleep(200);
   await key("ArrowRight"); await key("ArrowDown", 2);

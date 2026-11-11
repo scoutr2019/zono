@@ -199,7 +199,12 @@ h2 .hint { margin-left: 22px; }
 .cont-label { color: var(--accent-soft); font-size: 19px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .cont-title { font-size: 36px; font-weight: 700; margin: 4px 0; }
 .cont-now { color: var(--muted); font-size: 23px; }
-.cont .btn { margin-right: 0; }
+.cont .btn { margin-right: 0; pointer-events: none; }
+.cont:focus { background: #fff; color: var(--bg); transform: scale(1.03); box-shadow: 0 0 0 5px var(--accent-soft); }
+.cont:focus .cont-label { color: var(--accent); }
+.cont:focus .cont-now { color: #4b4a57; }
+.cont:focus .logo-box { background: #ececf3; color: #4b4a57; }
+.cont:focus .cont-btn { background: var(--accent); color: #fff; }
 .logo-box.big { width: 150px; height: 96px; background: #fff; }
 .corner.heart { left: 12px; right: auto; color: #fb7185; }
 

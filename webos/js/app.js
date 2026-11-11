@@ -917,9 +917,11 @@
       var nn = Guide.nowNext(rows);
       if (nn.now) now.textContent = T("now_on", nn.now.title);
     }, function () {});
-    return h("div", { cls: "cont" }, [h("div", { cls: "logo-box big" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
+    // the whole card is one button: a button on its right side could not be reached with the arrows
+    return h("div", { cls: "cont", go: function () { playChannel(channel); }, "data-key": "cont-play" }, [
+      h("div", { cls: "logo-box big" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
       h("div", { cls: "cont-text" }, [h("div", { cls: "cont-label", text: T("continue_channel") }), h("div", { cls: "cont-title", text: channel.title }), now]),
-      button(T("continue_btn"), function () { playChannel(channel); }, { primary: true, icon: "play", key: "cont-play" })]);
+      h("div", { cls: "btn primary cont-btn" }, [icon("play", "icon"), h("span", { text: T("continue_btn") })])]);
   }
   function discoverScreen() {
     var sh = S.shelves, rows = [];
