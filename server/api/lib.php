@@ -42,9 +42,18 @@ function read_json(int $max_bytes): array {
     return $data;
 }
 
+/** The first $max characters (works also when the server has no "mbstring" PHP extension, like some hosts). */
+function cut(string $text, int $max): string {
+    if (function_exists('mb_substr')) return mb_substr($text, 0, $max);
+    if ($max <= 60000 && preg_match('/^.{0,' . $max . '}/us', $text, $m)) return $m[0];
+    $cut = substr($text, 0, $max);
+    for ($i = 0; $i < 4 && $cut !== '' && !preg_match('//u', $cut); $i++) $cut = substr($cut, 0, -1); // no half letters
+    return $cut;
+}
+
 function text(array $data, string $key, int $max, string $pattern = '/^[\p{L}\p{N} ._:\/()\-+,]*$/u'): string {
     $value = trim((string)($data[$key] ?? ''));
-    $value = mb_substr($value, 0, $max);
+    $value = cut($value, $max);
     return preg_match($pattern, $value) ? $value : '';
 }
 

@@ -91,7 +91,7 @@ $reports = $pdo->query('SELECT * FROM reports ORDER BY id DESC LIMIT 20')->fetch
   <tr><td><?= h($r['tag_name'] ?? '') ?></td><td class="n"><?= $n ?></td></tr><?php endforeach; ?></table></div>
 </div>
 <div class="card"><h3 style="margin-top:0">Laatste probleemmeldingen</h3>
-<?php foreach ($reports as $r): ?><details><summary>#<?= (int)$r['id'] ?> · <?= h(substr($r['at'], 0, 16)) ?> · Zono <?= h($r['version']) ?> · <?= h(mb_substr($r['message'] ?: '(geen bericht)', 0, 80)) ?></summary>
+<?php foreach ($reports as $r): ?><details><summary>#<?= (int)$r['id'] ?> · <?= h(substr($r['at'], 0, 16)) ?> · Zono <?= h($r['version']) ?> · <?= h(cut($r['message'] ?: '(geen bericht)', 80)) ?></summary>
 <p><?= nl2br(h($r['message'])) ?></p><p>Contact: <?= h($r['contact'] ?: '-') ?> · Taal: <?= h($r['language']) ?> · <?= h($r['windows']) ?></p>
 <?php if ($r['log']): ?><pre><?= h($r['log']) ?></pre><?php endif; ?></details><?php endforeach; ?>
 <?php if (!$reports): ?><p>Nog geen meldingen.</p><?php endif; ?></div>

@@ -10,9 +10,10 @@ $language = text($data, 'language', 5, '/^[a-z]*$/');
 $windows = text($data, 'windows', 40);
 $day = gmdate('Y-m-d');
 $pdo = db();
-$pdo->prepare('INSERT INTO installs (id, first_day, last_day, version, language, windows) VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET last_day = excluded.last_day, version = excluded.version,
-               language = excluded.language, windows = excluded.windows')
+// (works with old SQLite versions too: no "ON CONFLICT … DO UPDATE")
+$pdo->prepare('INSERT OR IGNORE INTO installs (id, first_day, last_day, version, language, windows) VALUES (?, ?, ?, ?, ?, ?)')
     ->execute([$id, $day, $day, $version, $language, $windows]);
+$pdo->prepare('UPDATE installs SET last_day = ?, version = ?, language = ?, windows = ? WHERE id = ?')
+    ->execute([$day, $version, $language, $windows, $id]);
 $pdo->prepare('INSERT OR IGNORE INTO activity (day, id, version) VALUES (?, ?, ?)')->execute([$day, $id, $version]);
 answer(200, ['ok' => true]);

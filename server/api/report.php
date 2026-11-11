@@ -7,10 +7,10 @@ if (limited('report', REPORTS_PER_HOUR)) answer(429, ['error' => 'too many repor
 $version = text($data, 'version', 20, '/^[0-9.]*$/');
 $language = text($data, 'language', 5, '/^[a-z]*$/');
 $windows = text($data, 'windows', 60);
-$message = mb_substr(trim((string)($data['message'] ?? '')), 0, 4000);
-$contact = mb_substr(trim((string)($data['contact'] ?? '')), 0, 200);
+$message = cut(trim((string)($data['message'] ?? '')), 4000);
+$contact = cut(trim((string)($data['contact'] ?? '')), 200);
 if ($contact !== '' && !filter_var($contact, FILTER_VALIDATE_EMAIL)) $contact = '';
-$log = mb_substr((string)($data['log'] ?? ''), 0, 250 * 1024);
+$log = cut((string)($data['log'] ?? ''), 250 * 1024);
 if ($message === '' && $log === '') answer(400, ['error' => 'empty']);
 $pdo = db();
 $pdo->prepare('DELETE FROM reports WHERE at < ?')->execute([gmdate('c', time() - 90 * 86400)]);  // kept 90 days
