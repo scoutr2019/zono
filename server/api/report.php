@@ -22,7 +22,8 @@ counted('report2');
 
 $subject = "Zono probleem #$number" . ($version ? " (Zono $version)" : '');
 $body = "Melding #$number\nVersie: $version\nTaal: $language\nWindows: $windows\n"
-      . "Contact: " . ($contact ?: '(niet opgegeven)') . "\n\nBericht:\n" . ($message ?: '(geen)') . "\n";
+      . "Contact: " . ($contact ?: '(niet opgegeven)') . "\n\nBericht:\n" . ($message ?: '(geen)') . "\n"
+      . ($log !== '' ? "\nLog (begin; volledig in de bijlage):\n" . cut($log, 6000) . "\n" : "\nLog: (leeg)\n");
 $boundary = 'zono' . bin2hex(random_bytes(8));
 $headers = "From: Zono <" . MAIL_FROM . ">\r\nMIME-Version: 1.0\r\n"
          . "Content-Type: multipart/mixed; boundary=\"$boundary\"\r\n";

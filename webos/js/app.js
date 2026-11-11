@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "0.7.1";
+  var VERSION = "0.7.2";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
   var API = window.ZONO_API || "https://zono.be/api";
@@ -18,6 +18,19 @@
     if (LOG.length > 200) LOG.shift();
   }
   window.addEventListener("error", function (e) { log("error: " + e.message + " @" + (e.filename || "").split("/").pop() + ":" + e.lineno); });
+  window.addEventListener("unhandledrejection", function (e) { log("promise: " + (e.reason && (e.reason.message || e.reason.code) || e.reason)); });
+  var STARTED = Date.now();
+  // moments the screen was stuck (> 150 ms), with the page: this is what makes a TV feel slow
+  try {
+    new PerformanceObserver(function (list) {
+      list.getEntries().forEach(function (e) { if (e.duration > 150) log("stuck " + Math.round(e.duration) + " ms on " + where()); });
+    }).observe({ entryTypes: ["longtask"] });
+  } catch (e) { /* older TVs */ }
+  function where() {
+    if (typeof S === "undefined" || !player || !P) return "start";
+    if (!player.hidden && !P.mini) return "player";
+    return S.guideFor ? "channel guide" : S.detail ? "film page" : S.series ? "series page" : S.page + (P.mini ? " (+small picture)" : "");
+  }
 
   // ------------------------------------------------------------------ storage (only on this TV)
   function load(key, fallback) {
@@ -207,6 +220,7 @@
   }
 
   function refresh(source, quiet) {
+    var began = Date.now();
     S.loading = !quiet; S.error = ""; S.step = "";
     if (!quiet) render();
     return fetchLibrary(source, function (kind) { S.step = kind; if (!quiet) render(); }).then(function (items) {
@@ -214,6 +228,7 @@
       var same = quiet && S.items.length === items.length && S.items.length && S.items[0].id === items[0].id && S.items[S.items.length - 1].id === items[items.length - 1].id;
       S.items = items;
       buildShelves();
+      log("library " + (quiet ? "refreshed" : "loaded") + " in " + Math.round((Date.now() - began) / 1000) + " s: " + S.shelves.live.length + " channels, " + S.shelves.movies.length + " films, " + S.shelves.series.length + " series");
       if (same) return true; // nothing new: no redraw while you are browsing
       if (!S.source) { S.source = source; save("source", source); stopPairing(); S.choosing = needsChoice(); }
       render();
@@ -736,7 +751,7 @@
   function homeScreen() {
     var me = currentProfile();
     var menu = h("div", { cls: "menu" }, [h("img", { cls: "logo", src: "img/logo.png", alt: "Zono" })].concat(PAGES.map(function (p) {
-      return rowItem(T(p[1]), function () { S.page = p[0]; S.series = S.detail = S.guideFor = null; render(); focusFirst(".main"); if (p[0] === "guide") setTimeout(function () { focusFirst(".tvg-box.now"); }, 600); },
+      return rowItem(T(p[1]), function () { log("page " + p[0]); S.page = p[0]; S.series = S.detail = S.guideFor = null; render(); focusFirst(".main"); if (p[0] === "guide") setTimeout(function () { focusFirst(".tvg-box.now"); }, 600); },
         { sel: S.page === p[0] && !S.series && !S.detail && !S.guideFor, key: "menu-" + p[0] });
     })));
     if (profiles().length > 1) {
@@ -1444,6 +1459,21 @@
     var ua = navigator.userAgent || "", chrome = /Chrome\/(\d+)/.exec(ua);
     return ((/Web0S|webOS/i.test(ua) ? "LG webOS" : "TV browser") + (chrome ? " (Chrome " + chrome[1] + ")" : "")).slice(0, 40);
   }
+  /** A technical overview for "Report a problem": no logins, nothing about what is watched. */
+  function diagnostics() {
+    var mem = performance.memory, sh = S.shelves, lines = [
+      "Zono for LG TV " + VERSION + " · " + platform(),
+      "browser: " + navigator.userAgent,
+      "screen: " + window.innerWidth + "x" + window.innerHeight + " · zoom " + (document.documentElement.style.zoom || "1"),
+      "running: " + Math.round((Date.now() - STARTED) / 60000) + " min · page: " + where(),
+      mem ? "memory: " + Math.round(mem.usedJSHeapSize / 1048576) + " MB used of " + Math.round(mem.jsHeapSizeLimit / 1048576) + " MB" : "memory: (unknown)",
+      "provider: " + (S.source ? S.source.type : "none") + " · library: " + S.items.length + " items, " + sh.live.length + " channels, " + sh.movies.length + " films, " + sh.series.length + " series, " + sh.liveGroups.length + " channel groups",
+      "last refresh: " + (load("refreshedAt", 0) ? Math.round((Date.now() - load("refreshedAt", 0)) / 60000) + " min ago" : "never"),
+      "settings: language " + lang + ", 4K first " + S.uhd + ", countries " + (S.countries.join(",") || "all") + ", profiles " + profiles().length + (currentProfile().kids ? " (kids)" : "") + ", hidden groups " + S.hidden.length,
+      "guide cache: " + Object.keys(epgCache).length + " channels · xmltv: " + xmltv.state + " · worker: " + (worker ? "on" : "off"),
+    ];
+    return lines.join("\n");
+  }
   function sharing() { return load("share", true) !== false; }
   function installId() { var id = load("installId", ""); if (!/^[0-9a-f]{32}$/.test(id)) { id = hexId(16); save("installId", id); } return id; }
   function ping() {
@@ -1457,7 +1487,7 @@
     var field = input("", T("message"), function (v) { message = v; }, { key: "report-msg" });
     sheet({ title: T("report"), text: T("report_text"), content: [field], items: [{ label: T("send"), go: function () {
       closeSheet(); toast(T("loading"));
-      post(API + "/report.php", { version: VERSION, language: lang, windows: platform(), message: message || "(LG TV)", log: LOG.join("\n") })
+      post(API + "/report.php", { version: VERSION, language: lang, windows: platform(), message: message || "(LG TV)", log: diagnostics() + "\n\n--- log ---\n" + LOG.join("\n") })
         .then(function (a) { toast(T("report_sent", a.number || "?")); }, function (problem) {
           log("report: " + (problem && problem.message));
           toast(problem && problem.status === 429 ? T("report_limit") : T("report_failed") + " (" + ((problem && problem.message) || "?") + ")");
