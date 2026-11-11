@@ -27,6 +27,7 @@
   .send:disabled { opacity: .6; }
   .msg { margin-top: 14px; min-height: 22px; }
   .msg.bad { color: var(--red); } .msg.good { color: var(--green); font-weight: 600; }
+  .small { font-size: 14px; margin: 10px 0 0; }
   .note { font-size: 13px; color: var(--muted); margin-top: 22px; }
   [hidden] { display: none !important; }
 </style>
@@ -47,6 +48,10 @@
       <label for="user" data-t="user"></label><input id="user" autocapitalize="off" spellcheck="false">
       <label for="password" data-t="password"></label><input id="password" type="password" autocapitalize="off">
     </div>
+    <div id="subs" hidden>
+      <label for="subkey" data-t="key"></label><input id="subkey" autocapitalize="off" spellcheck="false">
+      <p class="small" data-t="keyhelp"></p>
+    </div>
     <div id="m3u" hidden>
       <label for="link" data-t="link"></label><input id="link" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://...">
     </div>
@@ -59,10 +64,14 @@
 <script>
 (function () {
   var TEXT = {
-    nl: { title: "Log in op Zono op je tv", intro: "Vul je IPTV-gegevens in. Ze gaan versleuteld naar je tv.", m3u: "M3U-link", server: "Server", user: "Gebruikersnaam", password: "Wachtwoord", link: "Link van je M3U-afspeellijst", send: "Naar mijn tv sturen", sending: "Versturen…", done: "Klaar! Kijk nu naar je tv.", fields: "Vul alle velden in.", expired: "Deze code is verlopen. Toon een nieuwe QR-code op je tv en scan opnieuw.", failed: "Versturen lukte niet. Controleer je internet en probeer opnieuw.", badlink: "Deze link is niet volledig. Scan de QR-code op je tv opnieuw.", privacy: "Je gegevens worden op je gsm versleuteld met een sleutel die alleen je tv kent. zono.be kan ze niet lezen en wist ze na 10 minuten." },
-    fr: { title: "Connectez Zono sur votre TV", intro: "Saisissez vos données IPTV. Elles sont envoyées chiffrées à votre TV.", m3u: "Lien M3U", server: "Serveur", user: "Nom d’utilisateur", password: "Mot de passe", link: "Lien de votre playlist M3U", send: "Envoyer à ma TV", sending: "Envoi…", done: "C’est fait ! Regardez votre TV.", fields: "Remplissez tous les champs.", expired: "Ce code a expiré. Affichez un nouveau QR code sur votre TV et scannez-le à nouveau.", failed: "L’envoi a échoué. Vérifiez votre connexion et réessayez.", badlink: "Ce lien est incomplet. Scannez à nouveau le QR code sur votre TV.", privacy: "Vos données sont chiffrées sur votre téléphone avec une clé que seule votre TV connaît. zono.be ne peut pas les lire et les efface après 10 minutes." },
-    en: { title: "Sign in to Zono on your TV", intro: "Enter your IPTV details. They are sent to your TV encrypted.", m3u: "M3U link", server: "Server", user: "Username", password: "Password", link: "Link to your M3U playlist", send: "Send to my TV", sending: "Sending…", done: "Done! Now look at your TV.", fields: "Fill in all fields.", expired: "This code has expired. Show a new QR code on your TV and scan it again.", failed: "Sending failed. Check your internet connection and try again.", badlink: "This link is incomplete. Scan the QR code on your TV again.", privacy: "Your details are encrypted on your phone with a key only your TV knows. zono.be cannot read them and deletes them after 10 minutes." },
-    de: { title: "Zono auf deinem Fernseher anmelden", intro: "Gib deine IPTV-Daten ein. Sie werden verschlüsselt an deinen Fernseher gesendet.", m3u: "M3U-Link", server: "Server", user: "Benutzername", password: "Passwort", link: "Link zu deiner M3U-Playlist", send: "An meinen Fernseher senden", sending: "Wird gesendet…", done: "Fertig! Schau jetzt auf deinen Fernseher.", fields: "Fülle alle Felder aus.", expired: "Dieser Code ist abgelaufen. Zeig einen neuen QR-Code auf dem Fernseher und scanne ihn erneut.", failed: "Senden fehlgeschlagen. Prüfe deine Internetverbindung und versuche es erneut.", badlink: "Dieser Link ist unvollständig. Scanne den QR-Code auf deinem Fernseher erneut.", privacy: "Deine Daten werden auf dem Handy mit einem Schlüssel verschlüsselt, den nur dein Fernseher kennt. zono.be kann sie nicht lesen und löscht sie nach 10 Minuten." }
+    nl: { title: "Log in op Zono op je tv", intro: "Vul je IPTV-gegevens in. Ze gaan versleuteld naar je tv.", m3u: "M3U-link", server: "Server", user: "Gebruikersnaam", password: "Wachtwoord", link: "Link van je M3U-afspeellijst", send: "Naar mijn tv sturen", sending: "Versturen…", done: "Klaar! Kijk nu naar je tv.", fields: "Vul alle velden in.", expired: "Deze code is verlopen. Toon een nieuwe QR-code op je tv en scan opnieuw.", failed: "Versturen lukte niet. Controleer je internet en probeer opnieuw.", badlink: "Deze link is niet volledig. Scan de QR-code op je tv opnieuw.", privacy: "Je gegevens worden op je gsm versleuteld met een sleutel die alleen je tv kent. zono.be kan ze niet lezen en wist ze na 10 minuten.",
+      subtitle: "OpenSubtitles op je tv", subintro: "Plak je gratis sleutel van opensubtitles.com. Die gaat versleuteld naar je tv.", key: "API-sleutel", keyhelp: "Maak een account op opensubtitles.com en kies daarna Consumers → New consumer: daar staat je API key." },
+    fr: { title: "Connectez Zono sur votre TV", intro: "Saisissez vos données IPTV. Elles sont envoyées chiffrées à votre TV.", m3u: "Lien M3U", server: "Serveur", user: "Nom d’utilisateur", password: "Mot de passe", link: "Lien de votre playlist M3U", send: "Envoyer à ma TV", sending: "Envoi…", done: "C’est fait ! Regardez votre TV.", fields: "Remplissez tous les champs.", expired: "Ce code a expiré. Affichez un nouveau QR code sur votre TV et scannez-le à nouveau.", failed: "L’envoi a échoué. Vérifiez votre connexion et réessayez.", badlink: "Ce lien est incomplet. Scannez à nouveau le QR code sur votre TV.", privacy: "Vos données sont chiffrées sur votre téléphone avec une clé que seule votre TV connaît. zono.be ne peut pas les lire et les efface après 10 minutes.",
+      subtitle: "OpenSubtitles sur votre TV", subintro: "Collez votre clé gratuite d’opensubtitles.com. Elle est envoyée chiffrée à votre TV.", key: "Clé API", keyhelp: "Créez un compte sur opensubtitles.com puis choisissez Consumers → New consumer : votre API key s’y trouve." },
+    en: { title: "Sign in to Zono on your TV", intro: "Enter your IPTV details. They are sent to your TV encrypted.", m3u: "M3U link", server: "Server", user: "Username", password: "Password", link: "Link to your M3U playlist", send: "Send to my TV", sending: "Sending…", done: "Done! Now look at your TV.", fields: "Fill in all fields.", expired: "This code has expired. Show a new QR code on your TV and scan it again.", failed: "Sending failed. Check your internet connection and try again.", badlink: "This link is incomplete. Scan the QR code on your TV again.", privacy: "Your details are encrypted on your phone with a key only your TV knows. zono.be cannot read them and deletes them after 10 minutes.",
+      subtitle: "OpenSubtitles on your TV", subintro: "Paste your free key from opensubtitles.com. It is sent to your TV encrypted.", key: "API key", keyhelp: "Make an account on opensubtitles.com, then choose Consumers → New consumer: your API key is there." },
+    de: { title: "Zono auf deinem Fernseher anmelden", intro: "Gib deine IPTV-Daten ein. Sie werden verschlüsselt an deinen Fernseher gesendet.", m3u: "M3U-Link", server: "Server", user: "Benutzername", password: "Passwort", link: "Link zu deiner M3U-Playlist", send: "An meinen Fernseher senden", sending: "Wird gesendet…", done: "Fertig! Schau jetzt auf deinen Fernseher.", fields: "Fülle alle Felder aus.", expired: "Dieser Code ist abgelaufen. Zeig einen neuen QR-Code auf dem Fernseher und scanne ihn erneut.", failed: "Senden fehlgeschlagen. Prüfe deine Internetverbindung und versuche es erneut.", badlink: "Dieser Link ist unvollständig. Scanne den QR-Code auf deinem Fernseher erneut.", privacy: "Deine Daten werden auf dem Handy mit einem Schlüssel verschlüsselt, den nur dein Fernseher kennt. zono.be kann sie nicht lesen und löscht sie nach 10 Minuten.",
+      subtitle: "OpenSubtitles auf deinem Fernseher", subintro: "Füge deinen kostenlosen Schlüssel von opensubtitles.com ein. Er wird verschlüsselt an deinen Fernseher gesendet.", key: "API-Schlüssel", keyhelp: "Lege ein Konto auf opensubtitles.com an und wähle Consumers → New consumer: Dort steht dein API key." }
   };
   var lang = (navigator.language || "nl").slice(0, 2).toLowerCase();
   var params = location.hash.slice(1).split(".");
@@ -88,7 +97,12 @@
     return;
   }
 
-  var xtream = true, $ = function (id) { return document.getElementById(id); };
+  var xtream = true, subsMode = params[3] === "subs", $ = function (id) { return document.getElementById(id); };
+  if (subsMode) {
+    document.querySelector("h1").textContent = T.subtitle;
+    document.querySelector("h1 + p").textContent = T.subintro;
+    document.querySelector(".tabs").hidden = true; $("xtream").hidden = true; $("subs").hidden = false;
+  }
   function tab(on) { xtream = on; $("tab-x").setAttribute("aria-pressed", on); $("tab-m").setAttribute("aria-pressed", !on); $("xtream").hidden = !on; $("m3u").hidden = on; }
   $("tab-x").onclick = function () { tab(true); };
   $("tab-m").onclick = function () { tab(false); };
@@ -96,9 +110,9 @@
 
   $("form").onsubmit = function (e) {
     e.preventDefault();
-    var login = xtream ? { type: "xtream", server: $("server").value.trim(), user: $("user").value.trim(), password: $("password").value }
+    var login = subsMode ? { type: "settings", opensubtitles: $("subkey").value.trim() } : xtream ? { type: "xtream", server: $("server").value.trim(), user: $("user").value.trim(), password: $("password").value }
       : { type: "m3u", m3u: $("link").value.trim() };
-    if (xtream ? !(login.server && login.user && login.password) : !/^https?:\/\//i.test(login.m3u)) return say(T.fields, "bad");
+    if (subsMode ? login.opensubtitles.length < 10 : xtream ? !(login.server && login.user && login.password) : !/^https?:\/\//i.test(login.m3u)) return say(T.fields, "bad");
     var nonce = nacl.randomBytes(24);
     var box = nacl.secretbox(new TextEncoder().encode(JSON.stringify(login)), nonce, key);
     var data = new Uint8Array(nonce.length + box.length); data.set(nonce); data.set(box, nonce.length);

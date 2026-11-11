@@ -71,6 +71,22 @@ function provider(req, res) {
   await tv.waitForSelector(".menu", { timeout: 10000 });
   check((await tv.evaluate(() => Zono.state.source.user)) === "jan", "the TV signed in with the details from the phone");
 
+  // the OpenSubtitles key, also with the phone
+  await tv.evaluate(() => { Zono.state.page = "settings"; Zono.render(); document.querySelector('[data-key="subkey"]').focus(); });
+  await tv.keyboard.press("Enter"); await sleep(100);
+  await tv.waitForSelector("#sheet img.qr", { timeout: 8000 });
+  const subsLink = await tv.evaluate(() => Zono.pair.url);
+  check(subsLink.endsWith(".nl.subs"), "QR for the subtitles key");
+  const phone2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await phone2.goto(subsLink);
+  check((await phone2.textContent("h1")) === "OpenSubtitles op je tv" && !(await phone2.isVisible("#server")), "phone page asks only for the key");
+  await phone2.fill("#subkey", "abcDEF1234567890");
+  await phone2.click("#send");
+  await phone2.waitForSelector(".msg.good", { timeout: 5000 });
+  await tv.waitForFunction(() => localStorage.getItem("zono.opensubtitles") === JSON.stringify("abcDEF1234567890"), null, { timeout: 8000 })
+    .then(() => check(true, "the TV saved the subtitles key"), () => check(false, "the TV saved the subtitles key"));
+  check(!(await tv.isVisible("#sheet")), "the window closes by itself");
+
   // a used code cannot be used again
   await phone.click("#send").catch(() => {});
   const again = await phone.evaluate(() => fetch("/api/pair.php", { method: "POST", headers: { "Content-Type": "application/json" },

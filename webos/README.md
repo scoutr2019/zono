@@ -24,3 +24,11 @@ and the Magic Remote pointer. Video plays in the TV's own player (HLS, MPEG-TS, 
    add the TV (its IP address and the passphrase shown in the Developer Mode app) and install the .ipk.
 
 Developer Mode runs for 50 hours at a time; press "Extend" in the Developer Mode app to keep it.
+
+## What's in 0.3
+
+Discover like Zono for Windows (banner with the top films, greeting, "continue with" your last channel), a TV guide tab
+(time grid, days, catch-up, reminders), now/next in Live TV and in the player, a guide per channel, searching the guide,
+channel numbers with the number keys (0 = previous channel), recently watched channels, film pages, subtitles and audio
+tracks (OpenSubtitles key sent with the phone), profiles with PIN and kids mode, hiding groups, "Report a problem" and
+anonymous daily statistics (can be switched off).

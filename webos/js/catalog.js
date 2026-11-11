@@ -77,6 +77,11 @@
         : streamUrl(source, "movie", sid, str(row.container_extension) || "mp4");
       var item = { id: server + "|" + kind + "|" + sid, kind: kind, sid: sid, title: str(row.name) || sid,
         group: groups[str(row.category_id)] || "", image: str(row.cover) || str(row.stream_icon), url: url };
+      if (kind === "live") {
+        if (row.num !== undefined && row.num !== null) item.num = parseInt(row.num, 10) || 0;
+        if (str(row.epg_channel_id)) item.epg = str(row.epg_channel_id);
+        if (["0", "", "null", "None"].indexOf(str(row.tv_archive)) < 0) { item.archive = 1; item.archiveDays = Math.floor(num(row.tv_archive_duration)); }
+      }
       if (kind !== "live") {
         var rating = num(row.rating) || num(row.rating_5based) * 2;
         item.rating = Math.round(Math.min(rating, 10) * 10) / 10;
@@ -135,13 +140,34 @@
         if (/^https?:\/\//i.test(line)) {
           var path = line.split("?")[0].toLowerCase();
           var kind = /\/movie\//.test(path) || /\.(mp4|mkv|avi)$/.test(path) ? "movie" : "live";
-          items.push({ id: line, kind: kind, title: title || info["tvg-name"] || line, group: info["group-title"] || "",
-            image: info["tvg-logo"] || "", url: line });
+          var entry = { id: line, kind: kind, title: title || info["tvg-name"] || line, group: info["group-title"] || "",
+            image: info["tvg-logo"] || "", url: line };
+          if (info["tvg-id"]) entry.epg = info["tvg-id"];
+          if (info["tvg-name"]) entry.tvgName = info["tvg-name"];
+          if (info["tvg-chno"]) entry.num = parseInt(info["tvg-chno"], 10) || 0;
+          items.push(entry);
         }
         info = null;
       }
     });
     return items;
+  }
+
+  /** The guide link in a playlist's first line: #EXTM3U url-tvg="..." / x-tvg-url="..." (first of a list). */
+  function m3uGuideUrl(raw) {
+    var lines = String(raw || "").replace(/^\uFEFF/, "").split(/\r?\n/, 5);
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].indexOf("#EXTM3U") !== 0) continue;
+      var m = /(?:url-tvg|x-tvg-url|tvg-url)="([^"]+)"/.exec(lines[i]);
+      var first = m ? m[1].split(",")[0].trim() : "";
+      return /^https?:\/\//i.test(first) ? first : "";
+    }
+    return "";
+  }
+
+  /** Xtream: the provider's whole guide as XMLTV. */
+  function xmltvUrl(source) {
+    return base(source.server) + "/xmltv.php?username=" + quote(source.user) + "&password=" + quote(source.password);
   }
 
   function words(query) { return String(query || "").toLowerCase().split(/\s+/).filter(Boolean); }
@@ -174,6 +200,6 @@
 
   var api = { isUhd: isUhd, itemUhd: itemUhd, uhdFirst: uhdFirst, groupsOf: groupsOf, base: base, quote: quote,
     streamUrl: streamUrl, apiUrl: apiUrl, categories: categories, streams: streams, episodes: episodes,
-    cleanEpisode: cleanEpisode, parseM3u: parseM3u, words: words, matches: matches, initials: initials, shelves: shelves };
+    cleanEpisode: cleanEpisode, parseM3u: parseM3u, m3uGuideUrl: m3uGuideUrl, xmltvUrl: xmltvUrl, words: words, matches: matches, initials: initials, shelves: shelves };
   if (typeof module !== "undefined") module.exports = api; else root.Catalog = api;
 })(this);
