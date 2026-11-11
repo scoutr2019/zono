@@ -59,7 +59,7 @@ test("episodes", () => {
 test("m3u", () => {
   const items = C.parseM3u('﻿#EXTM3U url-tvg="http://g.xml"\n#EXTINF:-1 tvg-id="een.be" tvg-logo="http://l.png" group-title="Vlaanderen",Eén HD\r\nhttp://s/live/1.ts\n' +
     '#EXTINF:-1 group-title="Films, nieuw",De film, deel 2\nhttp://s/movie/u/p/2.mkv\n#EXTINF:-1,Zonder link\n#EXTVLCOPT:x\n#EXTINF:-1,Rare\nrtmp://x\n');
-  assert.deepEqual(items.map((i) => [i.title, i.group, i.kind]), [["Eén HD", "Vlaanderen", "live"], ["De film, deel 2", "Films, nieuw", "movie"]]);
+  assert.deepEqual(items.map((i) => [i.title, i.group, i.kind]), [["Eén", "Vlaanderen", "live"], ["De film, deel 2", "Films, nieuw", "movie"]]);
 });
 
 test("search, initials, shelves", () => {
@@ -78,4 +78,28 @@ test("search, initials, shelves", () => {
 test("all four languages have every text", () => {
   const keys = Object.keys(STRINGS.en).sort();
   for (const l of ["nl", "fr", "de"]) assert.deepEqual(Object.keys(STRINGS[l]).sort(), keys, l);
+});
+
+test("display names like Zono for Windows", () => {
+  assert.deepEqual(C.cleanTitle("[ALL] NL: The Matrix (1999)"), { title: "The Matrix", year: "1999" });
+  assert.equal(C.cleanTitle("NL - Breaking Bad").title, "Breaking Bad");
+  assert.equal(C.cleanTitle("[TR] Uzak Şehir").title, "Uzak Şehir");
+  assert.equal(C.cleanTitle("(ALL) De Zaak Alzheimer").title, "De Zaak Alzheimer");
+  assert.ok(!C.cleanTitle("NPO 2ᵁᴴᴰ").title.includes("ᵁᴴᴰ"));
+  assert.equal(C.cleanTitle("(2020)").title, "(2020)");
+  assert.equal(C.cleanName("4K | VRT 1 HD"), "VRT 1");
+  assert.equal(C.cleanName("16K NPO 2ᵁᴴᴰ"), "NPO 2");
+  assert.equal(C.cleanName("BE: VTM 2 FHD"), "VTM 2");
+  assert.equal(C.cleanName("|BE| Eén (BE)"), "Eén");
+  ["HD", "4K", "|", "x"].forEach((t) => assert.ok(C.cleanName(t)));
+  assert.ok(C.isSeparator("##### NL #####"));
+  assert.ok(C.isSeparator("♦♦♦ WELCOME ♦♦♦"));
+  ["NPO 1", "VRT 1 HD", "4K | VRT 1 HD", "RTL 4"].forEach((t) => assert.ok(!C.isSeparator(t), t));
+  const live = C.streams([{ name: "4K | VRT 1 HD", stream_id: 1 }, { name: "##### BE #####", stream_id: 2 }], "live", source, {});
+  assert.equal(live.length, 1);
+  assert.equal(live[0].title, "VRT 1");
+  assert.ok(C.itemUhd(live[0]), "4K comes from the provider's own name");
+  assert.ok(C.matches(live[0], C.words("4k vrt")));
+  const films = C.streams([{ name: "[ALL] BE: Loft (2008)", stream_id: 5 }], "movie", source, {});
+  assert.deepEqual([films[0].title, films[0].year], ["Loft", "2008"]);
 });

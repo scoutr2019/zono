@@ -7,7 +7,7 @@
 
   /** A 4K (or better) channel, from the provider's own name or group: "4K | VRT 1", "NPO 1 UHD", "NPO 2ᵁᴴᴰ". */
   function isUhd(text) { return UHD.test(String(text || "")); }
-  function itemUhd(item) { return isUhd(item.title + " " + (item.group || "")); }
+  function itemUhd(item) { return isUhd((item.raw || item.title) + " " + (item.group || "")); }
 
   /** 4K first, otherwise the provider's order. */
   function uhdFirst(items) {
@@ -90,7 +90,7 @@
       }
       items.push(item);
     }
-    return items;
+    return tidy(items);
   }
 
   function cleanEpisode(raw) {
@@ -150,7 +150,7 @@
         info = null;
       }
     });
-    return items;
+    return tidy(items);
   }
 
   /** The guide link in a playlist's first line: #EXTM3U url-tvg="..." / x-tvg-url="..." (first of a list). */
@@ -170,10 +170,70 @@
     return base(source.server) + "/xmltv.php?username=" + quote(source.user) + "&password=" + quote(source.password);
   }
 
+
+  // ---- display names, the same rules as Zono for Windows (countries.py)
+  var PREFIX = /^\s*(?:[\[\(|]?\s*(?:[A-Z]{2,4}|4K|8K|UHD|FHD|HD|SD|VIP|HEVC|ᴴᴰ|ᵁᴴᴰ)\s*[\]\)|:]\s*|(?:[A-Z]{2,4}|4K|8K|UHD|FHD|HD|SD|VIP|HEVC)\s+[-–»|]\s+)/i;
+  var TAIL = { "4K": 1, "8K": 1, "UHD": 1, "FHD": 1, "HD": 1, "SD": 1, "HEVC": 1, "H265": 1, "H.265": 1, "50FPS": 1, "60FPS": 1, "RAW": 1, "BACKUP": 1,
+    "720P": 1, "1080P": 1, "2160P": 1, "1080I": 1, "ᴴᴰ": 1, "ᵁᴴᴰ": 1, "ᶠᴴᴰ": 1, "ᴴᴰ⁺": 1, "+HD": 1, "HD+": 1, "FHD+": 1, "MULTI": 1, "VIP": 1 };
+  var DECOR = /[◉●○◆◇♦★☆✦✪▶►◀◄■□▪▫•|#=*~_]+/g;
+  var SUPER = /[ʰ-˿ᴬ-ᵪᶛ-ᶿ⁰-₟²³¹]+/g;
+  var QUALITY_START = /^\s*(?:\d{1,2}K|UHD|FHD|HD|SD|VIP|HEVC)\s+(?=\S)/i;
+  var VOD_PREFIX = /^\s*(?:\[[^\]]{1,8}\]|\((?:[A-Z]{2,4}|ALL|MULTI)\)|\|[A-Z]{2,4}\||[A-Z]{2,3}\s*[|:]|[A-Z]{2,3}\s+-\s+)\s*/;
+
+  /** Lines like "♦♦♦ WELCOME ♦♦♦" or "##### BELGIË #####" that providers put between channel groups. */
+  function isSeparator(title) {
+    var text = String(title || "").trim(), found = text.match(DECOR) || [], symbols = 0;
+    found.forEach(function (m) { symbols += m.length; });
+    var letters = text.replace(/[^\wÀ-ɏ]/g, "");
+    DECOR.lastIndex = 0;
+    return symbols >= 3 && letters.length <= 24 && new RegExp("^" + DECOR.source).test(text);
+  }
+
+  /** Films and series: "[ALL] NL: The Matrix (1999)" -> {title: "The Matrix", year: "1999"}. */
+  function cleanTitle(title) {
+    var text = String(title || "").trim(), year = "";
+    for (var i = 0; i < 3; i++) { var stripped = text.replace(VOD_PREFIX, ""); if (stripped === text) break; text = stripped; }
+    text = text.replace(SUPER, "").replace(/^[\s\-|:]+|[\s\-|:]+$/g, "");
+    var m = /\s*[\(\[]((?:19|20)\d{2})[\)\]]\s*$/.exec(text);
+    if (m && text.length - m[0].length >= 2) { year = m[1]; text = text.slice(0, m.index).trim(); }
+    return { title: text.length >= 2 ? text : String(title), year: year };
+  }
+
+  /** Channels: "4K | VRT 1 HD" -> "VRT 1", "BE: VTM 2 FHD" -> "VTM 2". */
+  function cleanName(title) {
+    var original = String(title || "").trim(), text = String(title || "").replace(SUPER, " ").trim();
+    for (var i = 0; i < 3; i++) { var stripped = text.replace(PREFIX, "").replace(QUALITY_START, ""); if (stripped === text) break; text = stripped; }
+    var words = text.split(/\s+/).filter(Boolean);
+    while (words.length > 1) {
+      var last = words[words.length - 1].replace(/^[\(\[]+|[\)\]]+$/g, "").toUpperCase();
+      if (TAIL[last] || /^[\(\[][A-Z]{2,3}[\)\]]$/.test(words[words.length - 1])) words.pop(); else break;
+    }
+    text = words.join(" ").replace(DECOR, " ").replace(/\s{2,}/g, " ").replace(/^[\s\-–|:]+|[\s\-–|:]+$/g, "");
+    return text.length >= 2 ? text : original;
+  }
+
+  /** Clean names for the screen; the provider's own name stays in `raw` (for 4K and searching). */
+  function tidy(items) {
+    var out = [];
+    items.forEach(function (item) {
+      var raw = item.title, clean;
+      if (item.kind === "live") {
+        if (isSeparator(raw)) return;
+        clean = cleanName(raw);
+      } else if (item.kind === "movie" || item.kind === "series") {
+        var t = cleanTitle(raw); clean = t.title;
+        if (t.year && !item.year) item.year = t.year;
+      }
+      if (clean && clean !== raw) { item.raw = raw; item.title = clean; }
+      out.push(item);
+    });
+    return out;
+  }
+
   function words(query) { return String(query || "").toLowerCase().split(/\s+/).filter(Boolean); }
   function matches(item, w) {
     if (!w.length) return false;
-    var t = item.title.toLowerCase();
+    var t = (item.title + " " + (item.raw || "")).toLowerCase();
     return w.every(function (x) { return t.indexOf(x) >= 0; });
   }
 
@@ -200,6 +260,6 @@
 
   var api = { isUhd: isUhd, itemUhd: itemUhd, uhdFirst: uhdFirst, groupsOf: groupsOf, base: base, quote: quote,
     streamUrl: streamUrl, apiUrl: apiUrl, categories: categories, streams: streams, episodes: episodes,
-    cleanEpisode: cleanEpisode, parseM3u: parseM3u, m3uGuideUrl: m3uGuideUrl, xmltvUrl: xmltvUrl, words: words, matches: matches, initials: initials, shelves: shelves };
+    cleanEpisode: cleanEpisode, cleanTitle: cleanTitle, cleanName: cleanName, isSeparator: isSeparator, tidy: tidy, parseM3u: parseM3u, m3uGuideUrl: m3uGuideUrl, xmltvUrl: xmltvUrl, words: words, matches: matches, initials: initials, shelves: shelves };
   if (typeof module !== "undefined") module.exports = api; else root.Catalog = api;
 })(this);

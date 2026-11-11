@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "0.3.0";
+  var VERSION = "0.4.0";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
   var API = window.ZONO_API || "https://zono.be/api";
@@ -169,7 +169,7 @@
     loading: false, step: "", error: "",
     page: "discover", series: null, detail: null, guideFor: null,
     choosing: false, // the "who's watching?" screen
-    byId: {}, numbers: {},
+    byId: {}, numbers: {}, pos: {},
   };
   function loadProfileData() {
     profileId = load("profile", "main");
@@ -195,7 +195,8 @@
     // channel numbers: the provider's own (num / tvg-chno) or the position in the list
     S.numbers = {};
     var numbered = S.shelves.live.some(function (c) { return c.num > 0; });
-    S.shelves.live.forEach(function (c, i) { var n = numbered ? c.num : i + 1; if (n && !S.numbers[n]) S.numbers[n] = c; });
+    S.pos = {};
+    S.shelves.live.forEach(function (c, i) { var n = numbered ? c.num : i + 1; S.pos[c.id] = n; if (n && !S.numbers[n]) S.numbers[n] = c; });
   }
 
   function refresh(source, quiet) {
@@ -203,9 +204,11 @@
     if (!quiet) render();
     return fetchLibrary(source, function (kind) { S.step = kind; if (!quiet) render(); }).then(function (items) {
       S.loading = false;
+      var same = quiet && S.items.length === items.length && S.items.length && S.items[0].id === items[0].id && S.items[S.items.length - 1].id === items[items.length - 1].id;
       S.items = items;
       buildShelves();
       db.put("library", items);
+      if (same) return true; // nothing new: no redraw while you are browsing
       if (!S.source) { S.source = source; save("source", source); stopPairing(); S.choosing = needsChoice(); }
       render();
       return true;
@@ -227,7 +230,7 @@
     S.loading = true; render();
     db.get("library").then(function (items) {
       if (items && items.length) {
-        S.items = items; buildShelves();
+        S.items = Catalog.tidy(items); buildShelves();
         S.loading = false;
         render();
         refresh(S.source, true);
@@ -251,7 +254,7 @@
     var i = S.favorites.indexOf(item.id);
     if (i >= 0) S.favorites.splice(i, 1); else S.favorites.unshift(item.id);
     psave("favorites", S.favorites);
-    toast(isFavorite(item.id) ? "♥ " + item.title : T("favorite_removed", item.title));
+    toast(isFavorite(item.id) ? T("favorite_added", item.title) : T("favorite_removed", item.title));
   }
   function addRecent(id) {
     S.recent = [id].concat(S.recent.filter(function (x) { return x !== id; })).slice(0, 15);
@@ -325,6 +328,7 @@
     try { return d.toLocaleDateString(lang, { weekday: "long", day: "numeric", month: "long" }); } catch (e) { return d.toDateString(); }
   }
   function nowSeconds() { return Date.now() / 1000; }
+  function numberOf(channel) { return (S.pos && S.pos[channel.id]) || channel.num || 0; }
 
   // ------------------------------------------------------------------ reminders
   function reminderFor(item, program) {
@@ -353,6 +357,45 @@
     });
     if (changed) psave("reminders", S.reminders);
   }
+
+  // ------------------------------------------------------------------ icons (drawn, so they look the same on every TV:
+  // LG's own font has no arrows, hearts or bells)
+  var S2 = 'fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"';
+  var ICONS = {
+    play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
+    pause: '<path d="M8 5v14M16 5v14" ' + S2 + ' stroke-width="3.2"/>',
+    info: '<circle cx="12" cy="12" r="9" ' + S2 + '/><path d="M12 11v6" ' + S2 + '/><circle cx="12" cy="7.6" r="1.4" fill="currentColor"/>',
+    heart: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z" ' + S2 + '/>',
+    heartFill: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>',
+    replay: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" ' + S2 + '/><path d="M4.5 3.8v4.6h4.6" ' + S2 + '/>',
+    bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z" ' + S2 + '/><path d="M10 20.5a2 2 0 0 0 4 0" ' + S2 + '/>',
+    clock: '<circle cx="12" cy="12" r="8.5" ' + S2 + '/><path d="M12 7.5V12l3 2" ' + S2 + '/>',
+    left: '<path d="M14.5 5.5L8 12l6.5 6.5" ' + S2 + ' stroke-width="2.6"/>',
+    right: '<path d="M9.5 5.5L16 12l-6.5 6.5" ' + S2 + ' stroke-width="2.6"/>',
+    up: '<path d="M5.5 14.5L12 8l6.5 6.5" ' + S2 + ' stroke-width="2.6"/>',
+    down: '<path d="M5.5 9.5L12 16l6.5-6.5" ' + S2 + ' stroke-width="2.6"/>',
+    dot: '<circle cx="12" cy="12" r="5" fill="currentColor"/>',
+    star: '<path d="M12 3.6l2.5 5.3 5.8.8-4.2 4 1 5.7L12 16.7l-5.1 2.7 1-5.7-4.2-4 5.8-.8z" fill="currentColor"/>',
+    lock: '<rect x="5.5" y="10.5" width="13" height="9.5" rx="2" ' + S2 + '/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" ' + S2 + '/>',
+    smile: '<circle cx="12" cy="12" r="8.5" ' + S2 + '/><path d="M8.5 14a4.5 4.5 0 0 0 7 0" ' + S2 + '/><circle cx="9" cy="10" r="1.3" fill="currentColor"/><circle cx="15" cy="10" r="1.3" fill="currentColor"/>',
+    erase: '<path d="M9 6h11v12H9l-6-6z" ' + S2 + '/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5" ' + S2 + '/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5" ' + S2 + ' stroke-width="2.8"/>',
+    close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11" ' + S2 + ' stroke-width="2.6"/>',
+    list: '<path d="M8.5 7h11M8.5 12h11M8.5 17h11" ' + S2 + '/><circle cx="4.5" cy="7" r="1.3" fill="currentColor"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor"/><circle cx="4.5" cy="17" r="1.3" fill="currentColor"/>',
+    grid: '<rect x="3.5" y="5" width="17" height="14" rx="2" ' + S2 + '/><path d="M3.5 10h17M9 10v9" ' + S2 + '/>',
+    cc: '<rect x="3" y="5.5" width="18" height="13" rx="2.5" ' + S2 + '/><path d="M10.5 10.3a2.3 2.3 0 1 0 0 3.4M17 10.3a2.3 2.3 0 1 0 0 3.4" ' + S2 + ' stroke-width="1.9"/>',
+    download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14" ' + S2 + '/>',
+  };
+  function icon(name, cls) {
+    var span = document.createElement("span");
+    span.className = "ic" + (cls ? " " + cls : "");
+    span.innerHTML = '<svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true">' + (ICONS[name] || "") + "</svg>";
+    return span;
+  }
+  function withIcon(name, text, cls) { return h("span", { cls: "wi" + (cls ? " " + cls : "") }, [icon(name), text ? h("span", { text: text }) : null]); }
+  /** A remote key as a little key cap: "OK", "0", or an arrow. */
+  function keycap(k) { return h("span", { cls: "keycap" }, [ICONS[k] ? icon(k) : k]); }
+  function keyHint(keys, text) { return h("span", { cls: "keyhint" }, keys.map(keycap).concat([h("span", { text: text })])); }
 
   // ------------------------------------------------------------------ building blocks
   function h(tag, attrs, kids) {
@@ -390,7 +433,7 @@
     opts = opts || {};
     var pic = h("div", { cls: "pic" }, [placeholder(item.title), picture(item.image),
       item.rating > 0 ? h("div", { cls: "corner", text: item.rating.toFixed(1) }) : null,
-      isFavorite(item.id) ? h("div", { cls: "corner heart", text: "♥" }) : null,
+      isFavorite(item.id) ? h("div", { cls: "corner heart" }, [icon("heartFill")]) : null,
       opts.progress ? bar(opts.progress) : null]);
     return h("div", { cls: "card poster", go: go, long: opts.long || function () { toggleFavorite(item); render(); }, "data-key": "i-" + item.id },
       [pic, h("div", { cls: "title", text: item.title })]);
@@ -411,9 +454,9 @@
     var kids = [];
     if (opts.image !== undefined) kids.push(h("div", { cls: "logo-box" }, [opts.image ? picture(opts.image) : h("span", { text: Catalog.initials(title) })]));
     if (opts.time) kids.push(h("span", { cls: "time", text: opts.time }));
-    kids.push(h("div", { cls: "name" }, [h("div", { cls: "line", text: title }), opts.sub ? h("div", { cls: "sub", text: opts.sub }) : null]));
+    kids.push(h("div", { cls: "name" }, [h("div", { cls: "line" }, [opts.lead || null, title]), opts.sub ? h("div", { cls: "sub", text: opts.sub }) : null]));
     if (opts.badge) kids.push(h("span", { cls: "badge", text: opts.badge }));
-    if (opts.trail) kids.push(h("span", { cls: "trail", text: opts.trail }));
+    if (opts.trail) kids.push(typeof opts.trail === "string" ? h("span", { cls: "trail", text: opts.trail }) : h("span", { cls: "trail" }, [opts.trail]));
     return h("div", { cls: "row-item" + (opts.sel ? " sel" : "") + (opts.cls ? " " + opts.cls : ""), go: go, long: opts.long,
       "data-key": opts.key, onfocus: opts.onfocus }, kids);
   }
@@ -422,7 +465,7 @@
   function button(text, go, opts) {
     opts = opts || {};
     return h("div", { cls: "btn" + (opts.primary ? " primary" : "") + (opts.round ? " round" : ""), go: go, "data-key": opts.key },
-      [opts.icon ? h("span", { cls: "icon", text: opts.icon }) : null, opts.round ? null : h("span", { text: text }),
+      [opts.icon ? icon(opts.icon, "icon") : null, opts.round ? null : h("span", { text: text }),
         opts.round ? h("span", { cls: "under", text: text }) : null]);
   }
   function shelf(title, cards, hint) {
@@ -472,10 +515,12 @@
     (opts.items || []).forEach(function (it) {
       if (!it) return;
       if (it.heading) list.appendChild(h("div", { cls: "sheet-heading", text: it.heading }));
-      else list.appendChild(rowItem(it.label, it.go, { sel: it.sel, trail: it.trail, sub: it.sub, key: it.key }));
+      else list.appendChild(rowItem(it.label, it.go, { sel: it.sel, trail: it.trail, sub: it.sub, key: it.key, image: it.image, onfocus: it.onfocus }));
     });
     if (list.children.length) body.push(list);
     sheetEl.innerHTML = "";
+    sheetEl.className = "sheet" + (opts.side ? " side" : "");
+    sheetEl._digit = null;
     sheetEl.appendChild(h("div", { cls: "sheet-box" + (opts.wide ? " wide" : "") }, body));
     sheetEl.hidden = false;
     var first = sheetEl.querySelector(".f.sel") || focusables(sheetEl)[0];
@@ -502,7 +547,7 @@
     }
     draw();
     var pad = h("div", { cls: "pin-pad" }, "123456789".split("").concat(["", "0", "del"]).map(function (d) {
-      return d ? h("div", { cls: "pin-key", go: function () { add(d); }, text: d === "del" ? "⌫" : d }) : h("div", { cls: "pin-key empty" });
+      return d ? h("div", { cls: "pin-key", go: function () { add(d); } }, [d === "del" ? icon("erase") : d]) : h("div", { cls: "pin-key empty" });
     }));
     sheet({ title: title, content: [dots, pad] });
     sheetEl._digit = add;
@@ -630,7 +675,7 @@
   // ---- who's watching?
   function avatar(p, big) {
     var color = PROFILE_COLORS[(p.color || 0) % PROFILE_COLORS.length];
-    return h("div", { cls: "avatar" + (big ? " big" : ""), style: "background:" + color, text: p.kids ? "☺" : (p.name || T("profile_default")).slice(0, 1).toUpperCase() });
+    return h("div", { cls: "avatar" + (big ? " big" : ""), style: "background:" + color }, [p.kids ? icon("smile") : (p.name || T("profile_default")).slice(0, 1).toUpperCase()]);
   }
   function enterProfile(p, verified) {
     if (p.pin && !verified) {
@@ -650,7 +695,7 @@
     return h("div", { cls: "who" }, [h("img", { cls: "who-logo", src: "img/logo.png", alt: "Zono" }), h("h1", { text: T("who_watching") }),
       h("div", { cls: "who-list" }, profiles().map(function (p) {
         return h("div", { cls: "who-card", go: function () { enterProfile(p); }, "data-key": "who-" + p.id },
-          [avatar(p, true), h("div", { cls: "who-name", text: (p.name || T("profile_default")) + (p.pin ? " 🔒" : "") })]);
+          [avatar(p, true), h("div", { cls: "who-name" }, [p.name || T("profile_default"), p.pin ? icon("lock", "after") : null])]);
       }))]);
   }
 
@@ -728,45 +773,70 @@
     if (info.genre) parts.push(info.genre);
     if (info.duration) parts.push(info.duration);
     var rating = info.rating || item.rating;
-    if (rating) parts.push("★ " + (Math.round(rating * 10) / 10));
-    return parts.join("  ·  ");
+    var line = h("span", { text: parts.join("  ·  ") });
+    if (rating) { if (parts.length) line.appendChild(document.createTextNode("  ·  ")); line.appendChild(withIcon("star", String(Math.round(rating * 10) / 10), "gold")); }
+    return line;
+  }
+  function preload(src, done) {
+    if (!src) return done();
+    var img = new Image(), called = false;
+    function once() { if (!called) { called = true; done(); } }
+    img.onload = img.onerror = once; setTimeout(once, 4000); img.src = src;
   }
   function heroBlock() {
     var list = heroItems();
     if (!list.length) return null;
     if (hero.index >= list.length) hero.index = 0;
-    var item = list[hero.index];
     var box = h("div", { cls: "hero" });
-    function draw() {
-      var info = hero.info[item.id] || {};
-      box.innerHTML = "";
-      var bg = info.backdrop || item.backdrop || "";
-      box.appendChild(h("div", { cls: "hero-bg" }, [bg ? picture(bg) : (item.image ? picture(item.image, "blur") : placeholder(item.title))]));
-      box.appendChild(h("div", { cls: "hero-shade" }));
-      var rank = S.shelves.topMovies.indexOf(item);
-      box.appendChild(h("div", { cls: "hero-text" }, [
-        rank >= 0 && rank < 10 ? h("div", { cls: "hero-rank" }, [h("span", { cls: "badge", text: "TOP 10" }), h("span", { text: T("hero_rank", rank + 1) })]) : null,
-        h("h1", { text: item.title }),
-        h("div", { cls: "hero-meta", text: metaLine(item, info) }),
-        info.plot ? h("div", { cls: "hero-plot", text: info.plot }) : null,
-        h("div", { cls: "hero-buttons" }, [
-          button(T("play"), function () { play([item], 0); }, { primary: true, icon: "▶", key: "hero-play" }),
-          button(T("more_info"), function () { openDetail(item); }, { round: true, icon: "i", key: "hero-info" }),
-          button(T("favorite"), function () { toggleFavorite(item); draw(); focus(box.querySelector('[data-key="hero-fav"]')); },
-            { round: true, icon: isFavorite(item.id) ? "♥" : "♡", key: "hero-fav" })]),
-      ]));
-      box.appendChild(h("div", { cls: "hero-dots" }, list.map(function (_, i) { return h("span", { cls: i === hero.index ? "on" : "" }); })));
+    var layers = [h("div", { cls: "hero-bg on" }), h("div", { cls: "hero-bg" })], front = 0;
+    var text = h("div", { cls: "hero-text" }), dots = h("div", { cls: "hero-dots" });
+    box.appendChild(layers[0]); box.appendChild(layers[1]); box.appendChild(h("div", { cls: "hero-shade" })); box.appendChild(text); box.appendChild(dots);
+    function background(layer, item, info) {
+      layer.innerHTML = "";
+      var bg = info.backdrop || item.backdrop;
+      layer.appendChild(bg ? picture(bg) : item.image ? picture(item.image, "poster-bg") : placeholder(item.title));
     }
-    draw();
-    vodInfo(item).then(function () { if (box.parentNode) { var had = box.contains(document.activeElement) ? currentKey() : null; draw(); if (had) focus(box.querySelector('[data-key="' + had + '"]')); } });
-    // turns to the next film every 9 seconds, but not while you are on its buttons
+    function words(item, info) {
+      var had = box.contains(document.activeElement) ? currentKey() : null;
+      text.innerHTML = "";
+      var rank = S.shelves.topMovies.indexOf(item);
+      text.appendChild(h("div", { cls: "hero-rank" }, rank >= 0 && rank < 10 ? [h("span", { cls: "badge", text: "TOP 10" }), h("span", { text: T("hero_rank", rank + 1) })] : []));
+      text.appendChild(h("h1", { text: item.title }));
+      text.appendChild(h("div", { cls: "hero-meta" }, [metaLine(item, info)]));
+      text.appendChild(h("div", { cls: "hero-plot", text: info.plot || item.plot || "" }));
+      text.appendChild(h("div", { cls: "hero-buttons" }, [
+        button(T("play"), function () { play([item], 0); }, { primary: true, icon: "play", key: "hero-play" }),
+        button(T("more_info"), function () { openDetail(item); }, { round: true, icon: "info", key: "hero-info" }),
+        button(T("favorite"), function () { toggleFavorite(item); words(item, info); }, { round: true, icon: isFavorite(item.id) ? "heartFill" : "heart", key: "hero-fav" })]));
+      dots.innerHTML = "";
+      list.forEach(function (_, n) { dots.appendChild(h("span", { cls: n === hero.index ? "on" : "" })); });
+      if (had) focus(box.querySelector('[data-key="' + had + '"]'));
+    }
+    var first = list[hero.index];
+    background(layers[0], first, hero.info[first.id] || {});
+    words(first, hero.info[first.id] || {});
+    vodInfo(first).then(function (info) {
+      if (list[hero.index] !== first) return;
+      if ((info.backdrop || "") !== "") preload(info.backdrop, function () { background(layers[front], first, info); });
+      words(first, info);
+    });
+    // the next film fades in every 9 seconds (not while you are on the banner's buttons); its picture is loaded first
     clearInterval(hero.timer);
     hero.timer = setInterval(function () {
       if (!box.parentNode) return clearInterval(hero.timer);
-      if (box.contains(document.activeElement) || playerOpen() || sheetOpen()) return;
-      hero.index = (hero.index + 1) % list.length;
-      var fresh = heroBlock();
-      if (fresh) box.parentNode.replaceChild(fresh, box);
+      if (box.contains(document.activeElement) || playerOpen() || sheetOpen() || box.getBoundingClientRect().bottom < 100) return;
+      var next = (hero.index + 1) % list.length, item = list[next];
+      vodInfo(item).then(function (info) {
+        preload(info.backdrop || item.backdrop || item.image, function () {
+          if (!box.parentNode || box.contains(document.activeElement)) return;
+          hero.index = next;
+          var back = layers[1 - front];
+          background(back, item, info);
+          back.classList.add("on"); layers[front].classList.remove("on"); front = 1 - front;
+          text.classList.add("fade");
+          setTimeout(function () { words(item, info); text.classList.remove("fade"); }, 350);
+        });
+      });
     }, 9000);
     return box;
   }
@@ -785,7 +855,7 @@
     }, function () {});
     return h("div", { cls: "cont" }, [h("div", { cls: "logo-box big" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
       h("div", { cls: "cont-text" }, [h("div", { cls: "cont-label", text: T("continue_channel") }), h("div", { cls: "cont-title", text: channel.title }), now]),
-      button(T("continue_btn"), function () { playChannel(channel); }, { primary: true, icon: "▶", key: "cont-play" })]);
+      button(T("continue_btn"), function () { playChannel(channel); }, { primary: true, icon: "play", key: "cont-play" })]);
   }
   function discoverScreen() {
     var sh = S.shelves, rows = [];
@@ -834,7 +904,7 @@
   function liveInfo(pane, channel) {
     pane.innerHTML = "";
     pane.appendChild(h("div", { cls: "info-channel" }, [h("div", { cls: "logo-box big" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
-      h("div", null, [h("div", { cls: "info-title", text: channel.title }), channel.archive ? h("div", { cls: "info-tag", text: "↺ " + T("catchup") }) : null])]));
+      h("div", null, [h("div", { cls: "info-title", text: channel.title }), channel.archive ? h("div", { cls: "info-tag" }, [withIcon("replay", T("catchup"))]) : null])]));
     var body = h("div", { cls: "info-body" }, [h("div", { cls: "spinner small" })]);
     pane.appendChild(body);
     programsFor(channel, false).then(function (rows) {
@@ -867,17 +937,17 @@
     var channels = liveGroup === FAV ? favLive : sh.live.filter(function (c) { return c.group === liveGroup; });
     var groupList = h("div", { cls: "scroll-y" });
     lazyList(groupList, groups, function (g) {
-      var name = g === FAV ? "♥ " + T("favorites") : groupName(g);
-      return rowItem(name, function () { liveGroup = g; render(); }, { sel: g === liveGroup, badge: g !== FAV && Catalog.isUhd(g) ? "4K" : "", key: "g-" + g,
+      var name = g === FAV ? T("favorites") : groupName(g);
+      return rowItem(name, function () { liveGroup = g; render(); }, { lead: g === FAV ? icon("heartFill", "lead") : null, sel: g === liveGroup, badge: g !== FAV && Catalog.isUhd(g) ? "4K" : "", key: "g-" + g,
         long: g === FAV ? null : function () { askHide("live", g); } });
     }, 200);
     var pane = h("div", { cls: "live-info" });
     var channelList = h("div", { cls: "scroll-y" });
     if (!channels.length) channelList.appendChild(h("div", { cls: "empty", text: T("empty_group") }));
     lazyList(channelList, channels, function (c) {
-      var num = c.num || (S.shelves.live.indexOf(c) + 1);
+      var num = numberOf(c);
       return rowItem(c.title, function () { playChannel(c, channels); }, {
-        image: c.image || "", badge: Catalog.itemUhd(c) ? "4K" : "", trail: (isFavorite(c.id) ? "♥ " : "") + num, key: "c-" + c.id,
+        image: c.image || "", badge: Catalog.itemUhd(c) ? "4K" : "", trail: isFavorite(c.id) ? withIcon("heartFill", String(num)) : String(num), key: "c-" + c.id,
         long: function () { toggleFavorite(c); render(); },
         onfocus: function () {
           clearTimeout(infoTimer);
@@ -889,7 +959,7 @@
     if (channels.length) { pane._channel = channels[0]; setTimeout(function () { if (pane._channel === channels[0] && pane.parentNode) liveInfo(pane, channels[0]); }, 50); }
     var guideButton = h("div", { cls: "live-guide-btn" }, [button(T("guide_and_catchup"), function () {
       var c = pane._channel || channels[0]; if (c) openGuide(c);
-    }, { icon: "☰", key: "live-guide" })]);
+    }, { icon: "grid", key: "live-guide" })]);
     return h("div", { cls: "live" }, [
       h("div", { cls: "groups" }, [h("h2", { text: T("groups"), style: "padding-left:24px" }), groupList]),
       h("div", { cls: "channels" }, [h("h2", { style: "padding-left:24px" }, [liveGroup === FAV ? T("favorites") : groupName(liveGroup),
@@ -911,7 +981,7 @@
         var day = dayName(p.start);
         if (day !== lastDay) { list.appendChild(h("div", { cls: "day", text: day })); lastDay = day; }
         var live = p.start <= now && p.end > now, past = p.end <= now, back = past && Guide.canCatchUp(channel, p, now);
-        var trail = live ? "● " + T("now") : back ? "↺ " + T("catchup") : !past && reminderFor(channel, p) ? "🔔" : "";
+        var trail = live ? withIcon("dot", T("now"), "red") : back ? withIcon("replay", T("catchup")) : !past && reminderFor(channel, p) ? icon("bell") : "";
         var el = rowItem(p.title || "—", function () {
           if (live) playChannel(channel);
           else if (back) playCatchup(channel, p);
@@ -931,7 +1001,7 @@
     });
     return h("div", { cls: "guide" }, [
       h("div", { cls: "guide-head" }, [h("div", { cls: "logo-box big" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
-        h("h1", { text: channel.title }), button(T("watch_live"), function () { playChannel(channel); }, { primary: true, icon: "▶", key: "guide-live" })]),
+        h("h1", { text: channel.title }), button(T("watch_live"), function () { playChannel(channel); }, { primary: true, icon: "play", key: "guide-live" })]),
       h("div", { cls: "guide-body" }, [list, desc])]);
   }
   function playCatchup(channel, p) {
@@ -979,12 +1049,12 @@
       .concat(sh.liveGroups.map(function (g) { return chip(groupName(g), counts[g] || 0, TVG.group === g, function () { TVG.group = g; render(); }, "tg-" + g); })));
     var days = [[-2, "day_before"], [-1, "yesterday"], [0, "today"], [1, "tomorrow"]].map(function (d) {
       return h("div", { cls: "pill small" + (TVG.day === d[0] ? " sel" : ""), go: function () { TVG.day = d[0]; TVG.offset = null; render(); }, "data-key": "td" + d[0] },
-        [d[0] < 0 ? h("span", { cls: "icon", text: "↺ " }) : null, T(d[1])]);
+        [d[0] < 0 ? icon("replay", "lead") : null, T(d[1])]);
     });
-    var tools = h("div", { cls: "tvg-tools" }, days.concat([h("div", { cls: "tvg-space" }), h("span", { cls: "hint", text: "↺ = " + T("catchup").toLowerCase() }),
-      h("div", { cls: "pill small", go: function () { TVG.day = 0; TVG.offset = null; render(); focusFirst(".tvg-box.now"); }, "data-key": "t-now", text: "◷ " + T("now") }),
-      h("div", { cls: "pill small round", go: function () { shift(-120 * ppm); }, "data-key": "t-prev", text: "‹" }),
-      h("div", { cls: "pill small round", go: function () { shift(120 * ppm); }, "data-key": "t-next", text: "›" })]));
+    var tools = h("div", { cls: "tvg-tools" }, days.concat([h("div", { cls: "tvg-space" }), h("span", { cls: "hint" }, [icon("replay", "lead"), "= " + T("catchup").toLowerCase()]),
+      h("div", { cls: "pill small", go: function () { TVG.day = 0; TVG.offset = null; render(); focusFirst(".tvg-box.now"); }, "data-key": "t-now" }, [icon("clock", "lead"), T("now")]),
+      h("div", { cls: "pill small round", go: function () { shift(-120 * ppm); }, "data-key": "t-prev" }, [icon("left")]),
+      h("div", { cls: "pill small round", go: function () { shift(120 * ppm); }, "data-key": "t-next" }, [icon("right")])]));
     // time ruler
     var ruler = h("div", { cls: "tvg-lane ruler", style: "width:" + full + "px" });
     for (var m = 0; m < 24 * 60; m += 30) ruler.appendChild(h("div", { cls: "tick", style: "left:" + (m * ppm) + "px", text: (m / 60 < 10 ? "0" : "") + Math.floor(m / 60) + ":" + (m % 60 ? "30" : "00") }));
@@ -997,7 +1067,7 @@
       if (TVG.day === 0) lane.appendChild(h("div", { cls: "now-line", style: "left:" + nowX + "px" }));
       lanes.push(lane);
       lane.style.transform = "translateX(" + (-TVG.offset) + "px)";
-      var num = channel.num || (sh.live.indexOf(channel) + 1);
+      var num = numberOf(channel);
       var cell = h("div", { cls: "tvg-channel", go: function () { playChannel(channel, channels); }, "data-key": "tc-" + channel.id }, [
         h("span", { cls: "num", text: String(num) }), h("div", { cls: "logo-box" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
         h("span", { cls: "cname", text: channel.title })]);
@@ -1013,7 +1083,7 @@
             go: function () {
               if (live) playChannel(channel, channels);
               else if (back) playCatchup(channel, p);
-              else if (!past) { toggleReminder(channel, p); bell.textContent = reminderFor(channel, p) ? "🔔 " : ""; }
+              else if (!past) { toggleReminder(channel, p); bell.hidden = !reminderFor(channel, p); }
             },
             long: function () { openGuide(channel); },
             onfocus: function () {
@@ -1021,8 +1091,8 @@
               if (left < TVG.offset + 20 && right < TVG.offset + 260 || left > TVG.offset + view - 160) { TVG.offset = Math.max(0, Math.min(full - view, left - 60)); apply(); }
               show(channel, p);
             } });
-          var bell = h("span", { text: reminderFor(channel, p) ? "🔔 " : "" });
-          box.appendChild(h("div", { cls: "t" }, [bell, back ? "↺ " : "", p.title || "—"]));
+          var bell = icon("bell", "lead"); bell.hidden = !reminderFor(channel, p);
+          box.appendChild(h("div", { cls: "t" }, [bell, back ? icon("replay", "lead") : null, live ? icon("dot", "lead red") : null, p.title || "—"]));
           box.appendChild(h("div", { cls: "s", text: hm(p.start) + " – " + hm(p.end) }));
           lane.appendChild(box);
         });
@@ -1067,14 +1137,14 @@
       box.appendChild(h("div", { cls: "hero-shade full" }));
       var buttons = [];
       if (p && p.dur) {
-        buttons.push(button(T("continue_at", Math.round(p.pos / p.dur * 100) + "%"), function () { play([item], 0); }, { primary: true, icon: "▶", key: "d-play" }));
-        buttons.push(button(T("from_start"), function () { saveProgress(item, 0, p.dur); play([item], 0); }, { icon: "↺", key: "d-start" }));
-      } else buttons.push(button(T("play"), function () { play([item], 0); }, { primary: true, icon: "▶", key: "d-play" }));
+        buttons.push(button(T("continue_at", Math.round(p.pos / p.dur * 100) + "%"), function () { play([item], 0); }, { primary: true, icon: "play", key: "d-play" }));
+        buttons.push(button(T("from_start"), function () { saveProgress(item, 0, p.dur); play([item], 0); }, { icon: "replay", key: "d-start" }));
+      } else buttons.push(button(T("play"), function () { play([item], 0); }, { primary: true, icon: "play", key: "d-play" }));
       buttons.push(button(isFavorite(item.id) ? T("favorited") : T("favorite"), function () { toggleFavorite(item); draw(info); focus(box.querySelector('[data-key="d-fav"]')); },
-        { icon: isFavorite(item.id) ? "♥" : "♡", key: "d-fav" }));
+        { icon: isFavorite(item.id) ? "heartFill" : "heart", key: "d-fav" }));
       box.appendChild(h("div", { cls: "detail-body" }, [
         h("div", { cls: "cover" }, [placeholder(item.title), picture(info.cover || item.image)]),
-        h("div", { cls: "detail-text" }, [h("h1", { text: item.title }), h("div", { cls: "hero-meta", text: metaLine(item, info) }),
+        h("div", { cls: "detail-text" }, [h("h1", { text: item.title }), h("div", { cls: "hero-meta" }, [metaLine(item, info)]),
           info.plot || item.plot ? h("div", { cls: "detail-plot", text: info.plot || item.plot }) : null,
           info.director ? h("div", { cls: "detail-small" }, [h("b", { text: T("director") + ": " }), info.director]) : null,
           info.cast ? h("div", { cls: "detail-small" }, [h("b", { text: T("cast") + ": " }), String(info.cast).slice(0, 220)]) : null,
@@ -1134,9 +1204,9 @@
     if (!info) vodInfo(series);
     return h("div", { cls: "series" }, [
       h("div", { cls: "info" }, [h("div", { cls: "cover" }, [placeholder(series.title), picture(series.image)]), h("h1", { text: series.title }),
-        series.rating > 0 ? h("div", { cls: "gold", text: "★ " + series.rating }) : null, series.plot ? h("div", { cls: "plot", text: series.plot }) : null,
+        series.rating > 0 ? h("div", { cls: "gold" }, [withIcon("star", String(series.rating))]) : null, series.plot ? h("div", { cls: "plot", text: series.plot }) : null,
         h("div", { style: "margin-top:24px" }, [button(isFavorite(series.id) ? T("favorited") : T("favorite"), function () { toggleFavorite(series); render(); },
-          { icon: isFavorite(series.id) ? "♥" : "♡", key: "s-fav" })])]),
+          { icon: isFavorite(series.id) ? "heartFill" : "heart", key: "s-fav" })])]),
       eps]);
   }
 
@@ -1171,7 +1241,7 @@
           hits.forEach(function (hit) {
             var p = hit.program, c = hit.channel, live = p.start <= nowSeconds();
             tv.appendChild(rowItem(p.title, function () { if (live) playChannel(c); else { toggleReminder(c, p); fill(); } },
-              { image: c.image || "", time: dayName(p.start) + " " + hm(p.start), sub: c.title, trail: live ? "● " + T("now") : reminderFor(c, p) ? "🔔" : "", key: "t-" + c.id + p.start }));
+              { image: c.image || "", time: dayName(p.start) + " " + hm(p.start), sub: c.title, trail: live ? withIcon("dot", T("now"), "red") : reminderFor(c, p) ? icon("bell") : "", key: "t-" + c.id + p.start }));
           });
         });
       } else if (query.trim() && !found.length) results.appendChild(h("div", { cls: "empty", text: T("no_results") }));
@@ -1199,14 +1269,14 @@
           return { label: l[1], sel: subLanguage() === l[0], go: function () { save("subLang", l[0]); closeSheet(); render(); } };
         }) });
       }, { trail: subLanguage().toUpperCase(), key: "sublang" }),
-      rowItem(T("sub_key"), subsKeySheet, { trail: load("opensubtitles", "") ? "✓" : T("off"), key: "subkey" }),
+      rowItem(T("sub_key"), subsKeySheet, { trail: load("opensubtitles", "") ? icon("check") : T("off"), key: "subkey" }),
     ];
     if (!kids) {
       parts.push(h("h2", { text: T("profiles"), style: "margin-top:44px" }));
       profiles().forEach(function (p) {
         parts.push(h("div", { cls: "row-item", go: function () { profileSheet(p); }, "data-key": "prof-" + p.id },
-          [avatar(p), h("div", { cls: "name", text: (p.name || T("profile_default")) + (p.kids ? " · " + T("kids_profile") : "") + (p.pin ? " 🔒" : "") }),
-            p.id === me.id ? h("span", { cls: "trail", text: "✓" }) : null]));
+          [avatar(p), h("div", { cls: "name" }, [(p.name || T("profile_default")) + (p.kids ? " · " + T("kids_profile") : ""), p.pin ? icon("lock", "after") : null]),
+            p.id === me.id ? h("span", { cls: "trail" }, [icon("check")]) : null]));
       });
       parts.push(rowItem("+ " + T("add_profile"), function () { nameSheet(T("add_profile"), "", function (name) {
         var list = profiles(); list.push({ id: hexId(6), name: name, color: list.length % PROFILE_COLORS.length }); saveProfiles(list); render();
@@ -1216,7 +1286,7 @@
       parts.push(h("div", { cls: "empty", text: where }));
       parts.push(rowItem(T("refresh"), function () {
         toast(T("loading"));
-        refresh(S.source, true).then(function (ok) { toast(ok ? "✓" : T("error_connect", "")); });
+        refresh(S.source, true).then(function (ok) { toast(ok ? T("library_updated") : T("error_connect", "")); });
       }, { key: "refresh" }));
       parts.push(rowItem(T("logout"), function () {
         sheet({ title: T("logout") + "?", items: [{ label: T("logout"), go: function () {
@@ -1235,7 +1305,7 @@
   }
   function remindersSheet() {
     var items = S.reminders.map(function (r) {
-      return { label: r.title, sub: r.channelTitle + " · " + dayName(r.start) + " " + hm(r.start), trail: "✕", go: function () {
+      return { label: r.title, sub: r.channelTitle + " · " + dayName(r.start) + " " + hm(r.start), trail: icon("close"), go: function () {
         S.reminders.splice(S.reminders.indexOf(r), 1); psave("reminders", S.reminders); closeSheet(); remindersSheet(); render();
       } };
     });
@@ -1428,7 +1498,7 @@
     var k = e.keyCode, d = digitOf(e), a = document.activeElement;
     if (d !== null && !(a && a.tagName === "INPUT")) {
       e.preventDefault();
-      if (sheetOpen()) { if (sheetEl._digit) sheetEl._digit(d); return; }
+      if (sheetOpen()) { if (sheetEl._digit) return sheetEl._digit(d); if (!sheetEl.classList.contains("side")) return; closeSheet(); }
       if (S.source && !S.choosing && S.shelves.live.length) numberKey(d);
       return;
     }
@@ -1525,27 +1595,81 @@
       info = T("resume");
       video.addEventListener("loadedmetadata", function seek() { video.removeEventListener("loadedmetadata", seek); try { video.currentTime = saved.pos; } catch (e) { /* not seekable */ } });
     }
-    if (isLive()) { save(pkey("last"), item.id); addRecent(item.id); info = liveLine(); loadNowNext(item); }
+    if (isLive()) { var seekBar = document.getElementById("bar"); seekBar.classList.remove("on"); seekBar.hidden = true; }
+    else hideLiveBar();
+    if (isLive()) { save(pkey("last"), item.id); addRecent(item.id); hideBanner(); liveBar(item, epgCache[item.id] && epgCache[item.id].rows); loadNowNext(item); }
     spinner(true);
     var p = video.play(); if (p && p.catch) p.catch(function () {});
-    banner(titleOf(item), info || (isLive() ? "" : T("menu_hint_vod")));
+    if (!isLive()) banner(item.title, info);
     clearInterval(P.saveTimer);
     P.saveTimer = setInterval(remember, 15000);
   }
-  function titleOf(item) { var num = item.kind === "live" ? (item.num || S.shelves.live.indexOf(item) + 1) : 0; return (num > 0 ? num + "  " : "") + item.title + (item.kind === "live" && Catalog.itemUhd(item) ? "  ·  4K" : ""); }
-  function liveLine() {
-    var nn = P.programs ? Guide.nowNext(P.programs, nowSeconds(), 1) : null, parts = [];
-    if (nn && nn.now) parts.push(T("now") + ": " + nn.now.title + " (" + hm(nn.now.start) + "–" + hm(nn.now.end) + ")");
-    if (nn && nn.next[0]) parts.push(T("later") + ": " + hm(nn.next[0].start) + " " + nn.next[0].title);
-    if (!parts.length) parts.push((P.index + 1) + " / " + P.queue.length);
-    return parts.join("\n") + "\n" + T("zap_hint") + "  ·  " + T("menu_hint_live");
+  function titleOf(item) { var num = item.kind === "live" ? numberOf(item) : 0; return (num > 0 ? num + "  " : "") + item.title + (item.kind === "live" && Catalog.itemUhd(item) ? "  ·  4K" : ""); }
+  // ---- live: a bar at the bottom with what's on now and next (5 seconds), OK opens the channel list
+  var livebar = document.getElementById("livebar"), liveTimer = null;
+  function liveBar(channel, programs, preview) {
+    var nn = Guide.nowNext(programs || [], nowSeconds(), 1), now = nn.now, next = nn.next[0];
+    livebar.innerHTML = "";
+    livebar.appendChild(h("div", { cls: "logo-box big" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]));
+    var main = h("div", { cls: "lb-main" }, [
+      h("div", { cls: "lb-head" }, [h("span", { cls: "lb-num", text: String(numberOf(channel) || "") }), h("span", { cls: "lb-name", text: channel.title }),
+        Catalog.itemUhd(channel) ? h("span", { cls: "badge", text: "4K" }) : null, channel.archive ? withIcon("replay", T("catchup"), "lb-tag") : null]),
+      now ? h("div", { cls: "lb-now" }, [h("span", { cls: "lb-time", text: hm(now.start) + " – " + hm(now.end) }), h("span", { cls: "lb-title", text: now.title })])
+        : h("div", { cls: "lb-now lb-empty", text: programs ? T("no_guide") : T("loading") }),
+      now ? h("div", { cls: "lb-bar" }, [h("div", { style: "width:" + Math.round((nowSeconds() - now.start) / (now.end - now.start) * 100) + "%" })]) : null,
+      next ? h("div", { cls: "lb-next" }, [h("span", { cls: "lb-label", text: T("later") }), h("span", { cls: "lb-time", text: hm(next.start) }), h("span", { text: next.title })]) : null]);
+    livebar.appendChild(main);
+    if (!preview) livebar.appendChild(h("div", { cls: "lb-keys" }, [keyHint(["up", "down"], T("zap_hint")), keyHint(["OK"], T("menu_hint_live")),
+      P.previous ? keyHint(["0"], T("previous_channel")) : keyHint(["1", "2"], T("channel_numbers"))]));
+    livebar.classList.toggle("beside", !!preview);
+    livebar.classList.add("on");
+    clearTimeout(liveTimer);
+    if (!preview) liveTimer = setTimeout(function () { if (!(sheetOpen() && sheetEl.classList.contains("side"))) livebar.classList.remove("on"); }, 5000);
   }
+  function hideLiveBar() { clearTimeout(liveTimer); livebar.classList.remove("on"); }
+  function hideBanner() { document.getElementById("banner").classList.remove("on"); }
   function loadNowNext(item) {
     programsFor(item, false).then(function (rows) {
-      if (current() !== item) return;
       P.programs = rows;
-      if (document.getElementById("banner").classList.contains("on")) banner(titleOf(item), liveLine());
+      if (current() === item && livebar.classList.contains("on") && !livebar.classList.contains("beside")) liveBar(item, rows);
     }, function () {});
+  }
+  /** The channel list over the picture: the TV keeps playing; moving through it previews what's on. */
+  function zapPanel() {
+    var item = current(), queue = P.queue, at = P.index;
+    var from = Math.max(0, at - 60), to = Math.min(queue.length, at + 200);
+    var list = h("div", { cls: "sheet-list scroll-y zap-list" });
+    var rows = [];
+    for (var n = from; n < to; n++) (function (channel, index) {
+      var row = rowItem(channel.title, function () {
+        closeSheet();
+        if (index !== P.index) { P.previous = { queue: P.queue, index: P.index }; P.index = index; startItem(false); } else liveBar(channel, P.programs);
+      }, { image: channel.image || "", lead: h("span", { cls: "zap-num", text: String(numberOf(channel) || "") }), sel: index === at, key: "z-" + channel.id,
+        trail: isFavorite(channel.id) ? icon("heartFill") : "", sub: " ",
+        onfocus: function () {
+          var cached = epgCache[channel.id];
+          liveBar(channel, cached && cached.rows, true);
+          // what's on, for this row and the ones around it
+          rows.slice(Math.max(0, index - from - 3), index - from + 6).forEach(function (r) {
+            if (r._asked) return; r._asked = true;
+            limited(function () { return programsFor(r._channel, false); }).then(function (progs) {
+              var nn = Guide.nowNext(progs || [], nowSeconds(), 0);
+              var sub = r.querySelector(".sub"); if (sub) sub.textContent = nn.now ? nn.now.title : "";
+              if (r._channel === channel && document.activeElement === r) liveBar(channel, progs, true);
+            });
+          });
+        } });
+      row._channel = channel;
+      rows.push(row); list.appendChild(row);
+    })(queue[n], n);
+    var actions = h("div", { cls: "zap-actions" }, [
+      button(T("nav_guide"), function () { closeSheet(); closePlayer(); openGuide(item); }, { icon: "grid", key: "za-guide" }),
+      button(T("subtitles"), function () { closeSheet(); playerMenu(); }, { icon: "cc", key: "za-subs" }),
+      button(isFavorite(item.id) ? T("favorited") : T("favorite"), function () { toggleFavorite(item); closeSheet(); }, { icon: isFavorite(item.id) ? "heartFill" : "heart", key: "za-fav" })]);
+    sheet({ title: item.group ? groupName(item.group) : T("nav_live"), side: true, content: [actions, list],
+      onClose: function () { var c = current(); if (c && c.kind === "live") liveBar(c, P.programs); } });
+    var sel = list.querySelector(".row-item.sel");
+    if (sel) { focus(sel); list.scrollTop = Math.max(0, sel.offsetTop - 300); }
   }
 
   function spinner(on) { document.getElementById("spinner").hidden = !on; }
@@ -1575,7 +1699,12 @@
     var d = video.duration, t = video.currentTime;
     document.getElementById("bar-now").textContent = clock(t);
     document.getElementById("bar-end").textContent = isFinite(d) ? clock(d) : "";
-    document.getElementById("bar-hint").textContent = video.paused ? "❚❚ " + T("paused") : T("seek_hint") + "   ·   " + T("menu_hint_vod");
+    var hint = document.getElementById("bar-hint"), paused = video.paused;
+    if (hint._paused !== paused) {
+      hint._paused = paused; hint.innerHTML = "";
+      if (paused) hint.appendChild(withIcon("pause", T("paused")));
+      else { hint.appendChild(keyHint(["left", "right"], T("seek_hint"))); hint.appendChild(keyHint(["down"], T("menu_hint_vod"))); }
+    }
     document.getElementById("bar-fill").style.width = isFinite(d) && d > 0 ? (t / d * 100) + "%" : "0";
   }
   video.addEventListener("timeupdate", function () { if (document.getElementById("bar").classList.contains("on")) updateBar(); drawSubtitle(); });
@@ -1621,6 +1750,7 @@
     video.pause(); video.removeAttribute("src"); video.load();
     player.hidden = true;
     P.previous = null;
+    hideLiveBar();
     render();
     restoreFocus(P.returnFocus);
   }
@@ -1675,12 +1805,6 @@
         } });
       })(audio[a], a);
     }
-    if (live) {
-      items.push({ heading: T("nav_live") });
-      items.push({ label: T("guide_and_catchup"), go: function () { closeSheet(); var c = item; closePlayer(); openGuide(c); } });
-      if (P.previous) items.push({ label: T("previous_channel"), sub: P.previous.queue[P.previous.index].title, go: function () { closeSheet(); previousChannel(); } });
-      items.push({ label: isFavorite(item.id) ? T("favorited") : T("favorite"), go: function () { toggleFavorite(item); closeSheet(); } });
-    }
     sheet({ title: item.title, items: items, wide: true });
   }
 
@@ -1708,7 +1832,7 @@
       });
       if (!found.length) return toast(T("sub_none"));
       sheet({ title: T("subtitles"), wide: true, items: found.slice(0, 10).map(function (f) {
-        return { label: f.name, trail: "↓ " + f.downloads, go: function () { closeSheet(); downloadSubtitle(f); } };
+        return { label: f.name, trail: withIcon("download", String(f.downloads)), go: function () { closeSheet(); downloadSubtitle(f); } };
       }).concat([{ label: T("close"), go: closeSheet }]) });
     }, function (problem) { log("subtitles: " + problem.message); toast(problem.status === 429 || problem.status === 406 ? T("sub_limit") : T("sub_none")); });
   }
@@ -1737,22 +1861,22 @@
       case KEY.CH_DOWN: if (live) zap(1); return true;
       case KEY.UP: if (live) zap(-1); else showOverlay(); return true;
       case KEY.DOWN: if (live) zap(1); else playerMenu(); return true;
-      case KEY.LEFT: if (!live) seek(e.repeat ? -30 : -10); else showOverlay(); return true;
-      case KEY.RIGHT: if (!live) seek(e.repeat ? 30 : 10); else showOverlay(); return true;
+      case KEY.LEFT: if (!live) seek(e.repeat ? -30 : -10); else liveBar(item, P.programs); return true;
+      case KEY.RIGHT: if (!live) seek(e.repeat ? 30 : 10); else liveBar(item, P.programs); return true;
       case KEY.RW: if (!live) seek(-30); return true;
       case KEY.FF: if (!live) seek(30); return true;
       case KEY.OK:
         if (e.repeat) return true;
-        if (live) { if (bannerOn()) playerMenu(); else banner(titleOf(item), liveLine()); } else togglePause();
+        if (live) zapPanel(); else togglePause();
         return true;
       case KEY.PLAY: case KEY.PAUSE: case KEY.PLAY_PAUSE:
         if (!live) togglePause();
         return true;
     }
-    showOverlay();
+    if (live) liveBar(item, P.programs); else showOverlay();
     return false;
   }
-  player.addEventListener("click", function (e) { if (sheetEl.contains(e.target)) return; if (isLive()) { if (bannerOn()) playerMenu(); else showOverlay(); } else togglePause(); });
+  player.addEventListener("click", function (e) { if (sheetEl.contains(e.target)) return; if (isLive()) zapPanel(); else togglePause(); });
 
   document.addEventListener("visibilitychange", function () {
     if (document.hidden && playerOpen()) { remember(); video.pause(); }

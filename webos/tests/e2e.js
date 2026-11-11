@@ -119,7 +119,8 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
 
   // ---- discover like the Windows app
   await page.waitForFunction(() => /Drama/.test((document.querySelector(".hero-meta") || {}).textContent || ""), null, { timeout: 5000 }).catch(() => {});
-  check(/2026 {2}· {2}Drama {2}· {2}01:44:00 {2}· {2}★ 8.4/.test(await page.textContent(".hero-meta")), "banner: year, genre, duration, rating from the provider");
+  check(/2026 {2}· {2}Drama {2}· {2}01:44:00 {2}· {2}8.4/.test(await page.textContent(".hero-meta")) && !!(await page.$(".hero-meta .ic")), "banner: year, genre, duration, rating (with a drawn star)");
+  check((await page.textContent(".hero h1")).indexOf("(ALL)") < 0 && !/^\w\w - /.test(await page.textContent(".hero h1")), "banner: clean title without (ALL) / NL -");
   check(!!(await page.$(".hero-rank .badge")), "banner: TOP 10 badge");
   check((await page.textContent(".greet h1")).startsWith("Goede"), "greeting");
   await focusKey("hero-play"); await key("ArrowRight");
@@ -151,7 +152,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   await page.evaluate(() => { const rows = [...document.querySelectorAll(".guide-list .row-item")]; rows[rows.length - 1].focus(); });
   await key("Enter"); await sleep(200);
   check((await page.evaluate(() => Zono.state.reminders.length)) === 1, "OK on a later programme sets a reminder");
-  check((await page.textContent(".guide-list")).includes("🔔"), "the reminder bell shows in the guide");
+  check(await page.evaluate(() => [...document.querySelectorAll(".guide-list .row-item")].pop().querySelector(".trail .ic") !== null), "the reminder bell shows in the guide");
   await page.evaluate(() => { Zono.state.reminders[0].start = Date.now() / 1000 + 30; Zono.checkReminders(); });
   check((await page.textContent("#sheet")).includes("begint zo"), "the reminder pops up just before the start");
   await shot("05-reminder");
@@ -171,7 +172,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check((await focused()).startsWith("Programma 1"), "→ goes to the next programme");
   const before = await page.evaluate(() => Zono.state.reminders.length);
   await key("Enter"); await sleep(150);
-  check((await page.evaluate(() => Zono.state.reminders.length)) === before + 1 && (await focused()).startsWith("🔔"), "OK on a later programme: reminder with a bell");
+  check((await page.evaluate(() => Zono.state.reminders.length)) === before + 1 && await page.evaluate(() => !document.activeElement.querySelector(".t .ic").hidden), "OK on a later programme: reminder with a bell");
   await key("ArrowDown"); await sleep(150);
   check((await focused()).startsWith("Programma 1"), "↓ goes to the same time on the next channel");
   await key("ArrowLeft", 2); await sleep(200);
@@ -185,21 +186,35 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   await focusKey("menu-live");
 
   // ---- channel numbers, previous channel, player menu
+  // (desktop Chromium cannot play HLS like the TV does, so live channels get the test video's own format here)
+  await page.evaluate(() => Zono.state.items.forEach((i) => { if (i.kind === "live") i.url = i.url.replace(/\.m3u8$/, ".webm"); }));
   await key("7"); await sleep(1700);
   check(await page.isVisible("#player"), "typing 7 opens channel 7");
-  check((await page.textContent("#banner-title")).startsWith("7  "), "banner shows channel number 7");
-  await page.waitForFunction(() => /Nu: Het Journaal/.test(document.getElementById("banner-info").textContent), null, { timeout: 4000 }).catch(() => {});
-  check((await page.textContent("#banner-info")).includes("Nu: Het Journaal"), "banner shows now and next");
+  check((await page.textContent(".livebar .lb-num")) === "7" && await page.evaluate(() => document.getElementById("livebar").classList.contains("on")), "live bar at the bottom with channel number 7");
+  await page.waitForFunction(() => /Het Journaal/.test(document.getElementById("livebar").textContent), null, { timeout: 4000 }).catch(() => {});
+  check((await page.textContent(".livebar .lb-title")) === "Het Journaal" && (await page.textContent(".livebar .lb-next")).includes("Programma 1"), "live bar: now and next");
+  await shot("06-livebar");
+  await sleep(5300);
+  check(!(await page.evaluate(() => document.getElementById("livebar").classList.contains("on"))), "the live bar hides after 5 seconds");
   await key("1"); await key("2"); await sleep(1700);
-  check((await page.textContent("#banner-title")).startsWith("12  "), "1-2 switches to channel 12");
+  check((await page.textContent(".livebar .lb-num")) === "12", "1-2 switches to channel 12");
   await key("0"); await sleep(300);
-  check((await page.textContent("#banner-title")).startsWith("7  "), "0 goes back to the previous channel");
-  await key("Enter"); await sleep(100);
-  if (!(await page.isVisible("#sheet"))) { await key("Enter"); await sleep(150); }
-  check((await page.textContent("#sheet")).includes("Gids en terugkijken"), "OK twice in live TV opens the menu");
-  await shot("06-live-menu");
+  check((await page.textContent(".livebar .lb-num")) === "7", "0 goes back to the previous channel");
+  const t0 = (await video()).t;
+  await key("Enter"); await sleep(300);
+  check(await page.evaluate(() => document.getElementById("sheet").classList.contains("side")), "OK opens the channel list over the picture");
+  check((await focused()).includes("VTM"), "the list starts on the channel you watch");
+  await key("ArrowDown"); await sleep(600);
+  const picked = await page.evaluate(() => document.activeElement.querySelector(".zap-num").textContent);
+  check(await page.evaluate(() => document.getElementById("livebar").classList.contains("beside")), "moving through the list previews what's on");
+  await sleep(500);
+  check((await video()).t > t0 + 0.5, "the TV keeps playing behind the list");
+  await shot("06b-zaplist");
+  await key("Enter"); await sleep(400);
+  check(!(await page.isVisible("#sheet")) && (await page.textContent(".livebar .lb-num")) === picked && picked !== "7", "OK in the list switches channel");
+  await key("Enter"); await sleep(200);
   await key("Escape"); await sleep(100);
-  check(!(await page.isVisible("#sheet")) && (await page.isVisible("#player")), "Back closes only the menu");
+  check(!(await page.isVisible("#sheet")) && (await page.isVisible("#player")), "Back closes only the list");
   await key("Escape"); await sleep(200);
 
   // ---- films: subtitles from OpenSubtitles
@@ -264,7 +279,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check(!received.report[0].log.includes("geheim") && received.report[0].log.includes("/live/***/***/"), "the log has no login details");
   check((await page.textContent("#toast")).includes("#42"), "the report number is shown");
   await page.evaluate(() => Zono.ping()); await sleep(400);
-  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.3.0", "anonymous daily ping");
+  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.4.0", "anonymous daily ping");
 
   // ---- restart: first profile again, film progress kept
   await page.evaluate(() => localStorage.setItem("zono.profile", JSON.stringify("main")));
