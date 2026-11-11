@@ -64,22 +64,35 @@ function provider(req, res) {
   await phone.fill("#password", "geheim 123");
   await phone.screenshot({ path: path.join(os.tmpdir(), "zono-pair-phone.png") });
   await phone.click("#send");
-  await phone.waitForSelector(".msg.good", { timeout: 5000 });
+  await phone.waitForSelector("#wizard:not([hidden])");
+  await phone.screenshot({ path: path.join(os.tmpdir(), "zono-pair-phone-countries.png") });
+  await phone.click("#chips button:nth-child(2)"); await phone.click("#chips button:nth-child(3)"); // België, Nederland
+  check((await phone.textContent("#chips")).includes("1. België") && (await phone.textContent("#chips")).includes("2. Nederland"), "phone: countries in the order you tap them");
+  await phone.click("#next");
+  await phone.click("#langs button:nth-child(3)"); // English
+  await phone.click("#next");
+  await phone.fill("#name", "Lode");
+  await phone.click("#next");
+  await phone.waitForSelector("#msg2.good", { timeout: 5000 });
   check(true, "phone: sent");
   check(!seen.some((s) => s.includes("geheim")) && !seen.some((s) => s.includes(link.split(".")[3] || "nokey")), "the password never travels readable");
 
   await tv.waitForSelector(".menu", { timeout: 10000 });
   check((await tv.evaluate(() => Zono.state.source.user)) === "jan", "the TV signed in with the details from the phone");
+  check((await tv.evaluate(() => Zono.state.countries.join())) === "BE,NL", "the TV puts Belgium and the Netherlands first");
+  await tv.waitForSelector(".greet h1").catch(() => {});
+  check(/Lode$/.test(await tv.textContent(".greet h1").catch(() => "")) && (await tv.textContent('[data-key="menu-discover"]')).trim() === "Discover", "language English and 'Good …, Lode'");
+  await tv.evaluate(() => { localStorage.setItem("zono.language", JSON.stringify("nl")); });
 
   // the OpenSubtitles key, also with the phone
   await tv.evaluate(() => { Zono.state.page = "settings"; Zono.render(); document.querySelector('[data-key="subkey"]').focus(); });
   await tv.keyboard.press("Enter"); await sleep(100);
   await tv.waitForSelector("#sheet img.qr", { timeout: 8000 });
   const subsLink = await tv.evaluate(() => Zono.pair.url);
-  check(subsLink.endsWith(".nl.subs"), "QR for the subtitles key");
+  check(subsLink.endsWith(".subs"), "QR for the subtitles key");
   const phone2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await phone2.goto(subsLink);
-  check((await phone2.textContent("h1")) === "OpenSubtitles op je tv" && !(await phone2.isVisible("#server")), "phone page asks only for the key");
+  check(/OpenSubtitles/.test(await phone2.textContent("h1")) && !(await phone2.isVisible("#server")), "phone page asks only for the key");
   await phone2.fill("#subkey", "abcDEF1234567890");
   await phone2.click("#send");
   await phone2.waitForSelector(".msg.good", { timeout: 5000 });

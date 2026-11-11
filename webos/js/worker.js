@@ -1,8 +1,8 @@
 // Heavy work away from the screen, so the TV never freezes: downloading and reading the provider's library
 // (tens of thousands of channels and films), storing it, and reading big XMLTV guides.
-// Messages in:  {id, type: "load", source}  {id, type: "xmltv", url, keep: [ids], names: [titles]}
+// Messages in:  {id, type: "load", source}  {id, type: "epg", url} (a channel's guide, read here)  {id, type: "xmltv", url, keep: [ids], names: [titles]}
 // Messages out: {id, type: "step", kind}  {id, type: "done", items, guideUrl}  {id, type: "error", code, message}
-importScripts("catalog.js", "guide.js");
+importScripts("catalog.js", "guide.js", "countries.js");
 
 function get(url, timeout, maxBytes) {
   return new Promise(function (resolve, reject) {
@@ -24,7 +24,7 @@ function json(url) { return get(url).then(function (t) { return JSON.parse(t.rep
 
 /** Sends a big list in pieces: one huge message would freeze the screen while it is unpacked. */
 function send(id, items, extra) {
-  for (var i = 0; i < items.length; i += 4000) postMessage({ id: id, type: "chunk", items: items.slice(i, i + 4000) });
+  for (var i = 0; i < items.length; i += 2000) postMessage({ id: id, type: "chunk", items: items.slice(i, i + 2000) });
   var done = { id: id, type: "done" };
   for (var k in extra || {}) done[k] = extra[k];
   postMessage(done);
@@ -65,6 +65,7 @@ function searchKeys(items) {
     i.q = (i.title + " " + (i.raw || "")).toLowerCase();
     if (Guide.adult(i.group) || Guide.adult(i.title)) i.adult = 1; // for kids profiles
     if (i.kind === "live") i.k4 = Catalog.itemUhd(i) ? 1 : 0; // 4K, worked out once
+    i.cc = Countries.detect(i); // country, for "your countries first"
   });
   return items;
 }
@@ -122,7 +123,8 @@ function xmltv(id, url, keep, names) {
 onmessage = function (e) {
   var m = e.data;
   var job = m.type === "load" ? load(m.id, m.source)
-    : m.type === "cache" ? read("library").then(function (items) { send(m.id, items || [], { old: !!(items && items[0] && !items[0].q) }); })
+    : m.type === "epg" ? json(m.url).then(function (data) { postMessage({ id: m.id, type: "done", rows: Guide.xtreamPrograms(data) }); })
+    : m.type === "cache" ? read("library").then(function (items) { send(m.id, items || [], { old: !!(items && items[0] && (!items[0].q || items[0].cc === undefined)) }); })
     : xmltv(m.id, m.url, m.keep || [], m.names || []);
   job.catch(function (problem) {
     postMessage({ id: m.id, type: "error", code: (problem && problem.code) || "error", message: (problem && (problem.message || problem.code)) || String(problem) });

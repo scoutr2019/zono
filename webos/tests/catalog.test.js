@@ -103,3 +103,17 @@ test("display names like Zono for Windows", () => {
   const films = C.streams([{ name: "[ALL] BE: Loft (2008)", stream_id: 5 }], "movie", source, {});
   assert.deepEqual([films[0].title, films[0].year], ["Loft", "2008"]);
 });
+
+test("chosen countries first", () => {
+  const items = [
+    { id: "1", kind: "live", title: "TF1", group: "FR", cc: "FR" }, { id: "2", kind: "live", title: "VRT 1", group: "BE", cc: "BE" },
+    { id: "3", kind: "live", title: "NPO 1", group: "NL", cc: "NL" }, { id: "4", kind: "live", title: "Canvas", group: "BE", cc: "BE" },
+    { id: "5", kind: "movie", title: "A", group: "FR films", cc: "FR", added: 9 }, { id: "6", kind: "movie", title: "B", group: "NL films", cc: "NL", added: 1 },
+  ];
+  const sh = C.shelves(items, false, ["NL", "BE"]);
+  assert.deepEqual(sh.live.map((i) => i.title), ["NPO 1", "VRT 1", "Canvas", "TF1"]);
+  assert.deepEqual(sh.liveGroups, ["NL", "BE", "FR"]);
+  assert.deepEqual(sh.movieGroups, ["NL films", "FR films"]);
+  assert.deepEqual(sh.newMovies.map((i) => i.title), ["B", "A"], "own countries first, then the rest");
+  assert.deepEqual(C.shelves(items, false, []).live.map((i) => i.title), ["TF1", "VRT 1", "NPO 1", "Canvas"], "no choice: provider order");
+});

@@ -132,14 +132,68 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   await key("Escape"); await sleep(150);
   check(!(await page.$(".detail")), "Back leaves the film page");
 
-  // ---- live tv: what's on, guide, catch-up, reminder
+  // (desktop Chromium cannot play HLS like the TV does, so live channels get the test video's own format here)
+  await page.evaluate(() => Zono.state.items.forEach((i) => { if (i.kind === "live") i.url = i.url.replace(/\.m3u8$/, ".webm"); }));
+  const miniOn = () => page.evaluate(() => { const p = document.getElementById("player"); return !p.hidden && p.classList.contains("mini") ? Zono.mini.channel && Zono.mini.channel.title : null; });
+
+  // ---- live tv: groups, channels, small picture, what's on
   await focusKey("menu-live"); await key("Enter");
-  await page.waitForFunction(() => /Het Journaal/.test((document.querySelector(".live-info") || {}).textContent || ""), null, { timeout: 5000 }).catch(() => {});
-  check((await page.textContent(".live-info")).includes("Het Journaal"), "Live TV shows what's on now");
+  await page.waitForFunction(() => /Het Journaal/.test((document.querySelector(".now-card") || {}).textContent || ""), null, { timeout: 5000 }).catch(() => {});
+  check((await page.textContent(".now-card")).includes("Het Journaal"), "Live TV shows what's on now");
+  check(!(await page.$('[data-key="live-guide"]')), "no extra guide button any more");
   check((await page.$eval(".channels h2", (h) => h.firstChild.textContent)) === "4K | Belgie", "4K group first");
-  await key("ArrowRight"); await sleep(400);
+  await sleep(1200);
+  const firstMini = await miniOn();
+  check(!!firstMini, "a small picture plays in Live TV: " + firstMini);
+  await key("ArrowRight"); await key("ArrowDown"); await sleep(1800);
+  const nextMini = await miniOn();
+  check(nextMini && nextMini !== firstMini && (await focused()).includes(nextMini), "the small picture follows the channel you stop on");
+  check((await video()).t > 0.2, "the small picture plays");
   await shot("03-live");
-  await focusKey("live-guide"); await key("Enter");
+  await key("Enter"); await sleep(400);
+  check((await page.evaluate(() => !document.getElementById("player").classList.contains("mini"))) && await page.isVisible("#livebar.on"), "OK: that channel full screen (without starting again)");
+  await key("Escape"); await sleep(1500);
+  check(!!(await page.$(".live .mini-slot")) && !!(await miniOn()), "Back: Live TV with the small picture again");
+
+  // ---- the tv guide tab: grid, small picture top right, channel numbers jump in the grid
+  await focusKey("menu-guide"); await key("Enter");
+  await page.waitForSelector(".tvg-box.now", { timeout: 5000 });
+  await sleep(1200);
+  check((await focused()).startsWith("Het Journaal"), "TV guide opens on what's on now");
+  check(!(await page.$(".tvg-groups")), "no group buttons in the TV guide");
+  check(!!(await miniOn()), "small picture top right in the TV guide: " + (await miniOn()));
+  check(!!(await page.$(".now-line")) && !!(await page.$(".now-label")), "guide: red line at the current time");
+  await key("5"); await sleep(1800);
+  check(await page.evaluate(() => document.activeElement.closest(".tvg-row").getAttribute("data-channel").endsWith("|live|5")), "typing 5 in the guide goes to channel 5");
+  check((await miniOn() || "").endsWith(" 5") && !(await page.isVisible("#player:not(.mini)")), "… and the small picture shows it, on the guide page");
+  await key("ArrowDown"); await sleep(200);
+  const below = await page.evaluate(() => document.activeElement.closest(".tvg-row").querySelector(".cname").textContent);
+  await key("Enter"); await sleep(600);
+  const switched = await miniOn();
+  check(!!switched && switched === below && !switched.endsWith(" 5"), "OK on what's on: in the small picture (" + switched + ")");
+  await key("Enter"); await sleep(400);
+  check(await page.evaluate(() => !document.getElementById("player").classList.contains("mini") && !document.getElementById("player").hidden), "OK again: full screen");
+  await key("Escape"); await sleep(1500);
+  check(!!(await page.$(".tvg")) && !!(await miniOn()), "Back: the TV guide again");
+  await page.evaluate(() => document.querySelector(".tvg-box.now").focus()); await sleep(100);
+  await key("ArrowRight"); await sleep(150);
+  check((await focused()).startsWith("Programma 1"), "→ goes to the next programme");
+  const before = await page.evaluate(() => Zono.state.reminders.length);
+  await key("Enter"); await sleep(150);
+  check((await page.evaluate(() => Zono.state.reminders.length)) === before + 1 && await page.evaluate(() => !document.activeElement.querySelector(".t .ic").hidden), "OK on a later programme: reminder with a bell");
+  await key("ArrowDown"); await sleep(150);
+  check((await focused()).startsWith("Programma 1"), "↓ goes to the same time on the next channel");
+  await sleep(400); // the earlier programmes of the row come in
+  await key("ArrowLeft", 2); await sleep(200);
+  const offsetBefore = await page.evaluate(() => document.querySelector(".tvg-lane:not(.ruler)").style.transform);
+  await key("ArrowLeft", 2); await sleep(200);
+  check((await focused()).startsWith("Thuis"), "← goes back in time");
+  check((await page.evaluate(() => document.querySelector(".tvg-lane:not(.ruler)").style.transform)) !== offsetBefore, "the grid scrolls along");
+  await shot("04b-tvguide");
+
+  // ---- the guide of one channel (hold OK in the grid): catch-up and reminders
+  await page.evaluate(() => [...document.querySelectorAll(".tvg-row[data-channel]")].find((r) => r.getAttribute("data-channel").endsWith("|live|1")).querySelector(".tvg-box.now").focus());
+  await hold();
   await page.waitForSelector(".guide-list .row-item");
   check((await page.$$eval(".guide .day", (d) => d.map((x) => x.textContent))).includes("Vandaag"), "guide: days");
   check((await focused()).includes("Het Journaal"), "guide: focus on what's on now");
@@ -151,43 +205,19 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   await key("Escape"); await sleep(200);
   await page.evaluate(() => { const rows = [...document.querySelectorAll(".guide-list .row-item")]; rows[rows.length - 1].focus(); });
   await key("Enter"); await sleep(200);
-  check((await page.evaluate(() => Zono.state.reminders.length)) === 1, "OK on a later programme sets a reminder");
+  check((await page.evaluate(() => Zono.state.reminders.length)) === before + 2, "OK on a later programme sets a reminder");
   check(await page.evaluate(() => [...document.querySelectorAll(".guide-list .row-item")].pop().querySelector(".trail .ic") !== null), "the reminder bell shows in the guide");
-  await page.evaluate(() => { Zono.state.reminders[0].start = Date.now() / 1000 + 30; Zono.checkReminders(); });
+  await page.evaluate(() => { Zono.state.reminders[0].start = Date.now() / 1000 + 30; Zono.state.reminders[0].shown = false; Zono.checkReminders(); });
   check((await page.textContent("#sheet")).includes("begint zo"), "the reminder pops up just before the start");
   await shot("05-reminder");
   await key("ArrowDown"); await key("Enter"); await sleep(150);
   check(!(await page.isVisible("#sheet")), "the reminder can be closed");
-  await key("Escape"); await sleep(150);
-
-  // ---- the tv guide tab (grid like Zono for Windows)
-  await focusKey("menu-guide"); await key("Enter");
-  await page.waitForSelector(".tvg-box.now", { timeout: 5000 });
-  await sleep(800);
-  check((await focused()).startsWith("Het Journaal"), "TV guide opens on what's on now");
-  const chips = await page.$$eval(".tvg-groups .pill", (p) => p.map((x) => x.textContent));
-  check(chips[0] === "Alles40" && chips.includes("Belgie10"), "guide: groups with counts " + chips.slice(0, 3));
-  check(!!(await page.$(".now-line")) && !!(await page.$(".now-label")), "guide: red line at the current time");
-  await key("ArrowRight"); await sleep(150);
-  check((await focused()).startsWith("Programma 1"), "→ goes to the next programme");
-  const before = await page.evaluate(() => Zono.state.reminders.length);
-  await key("Enter"); await sleep(150);
-  check((await page.evaluate(() => Zono.state.reminders.length)) === before + 1 && await page.evaluate(() => !document.activeElement.querySelector(".t .ic").hidden), "OK on a later programme: reminder with a bell");
-  await key("ArrowDown"); await sleep(150);
-  check((await focused()).startsWith("Programma 1"), "↓ goes to the same time on the next channel");
-  await key("ArrowLeft", 2); await sleep(200);
-  const offsetBefore = await page.evaluate(() => document.querySelector(".tvg-lane:not(.ruler)").style.transform);
-  await key("ArrowLeft", 2); await sleep(200);
-  check((await focused()).startsWith("Thuis"), "← goes back in time");
-  check((await page.evaluate(() => document.querySelector(".tvg-lane:not(.ruler)").style.transform)) !== offsetBefore, "the grid scrolls along");
-  await shot("04b-tvguide");
+  await key("Escape"); await sleep(300);
   await focusKey("td-1"); await key("Enter"); await sleep(600);
   check((await page.$eval(".pill.sel[data-key='td-1']", (p) => p.textContent)).includes("Gisteren"), "guide: yesterday");
-  await focusKey("menu-live");
+  await focusKey("menu-live"); await key("Enter"); await sleep(300);
 
-  // ---- channel numbers, previous channel, player menu
-  // (desktop Chromium cannot play HLS like the TV does, so live channels get the test video's own format here)
-  await page.evaluate(() => Zono.state.items.forEach((i) => { if (i.kind === "live") i.url = i.url.replace(/\.m3u8$/, ".webm"); }));
+  // ---- channel numbers, previous channel, the channel list over the picture
   await key("7"); await sleep(1700);
   check(await page.isVisible("#player"), "typing 7 opens channel 7");
   check((await page.textContent(".livebar .lb-num")) === "7" && await page.evaluate(() => document.getElementById("livebar").classList.contains("on")), "live bar at the bottom with channel number 7");
@@ -279,7 +309,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check(!received.report[0].log.includes("geheim") && received.report[0].log.includes("/live/***/***/"), "the log has no login details");
   check((await page.textContent("#toast")).includes("#42"), "the report number is shown");
   await page.evaluate(() => Zono.ping()); await sleep(400);
-  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.5.0", "anonymous daily ping");
+  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.6.0", "anonymous daily ping");
 
   // ---- restart: first profile again, film progress kept
   await page.evaluate(() => localStorage.setItem("zono.profile", JSON.stringify("main")));

@@ -413,3 +413,33 @@ video::cue { font-size: 46px; background: rgba(0,0,0,.65); color: #fff; }
 .tvg-box .t .ic.lead { margin-right: 8px; }
 .tvg-tools .hint { display: inline-flex; align-items: center; }
 .btn.round:focus { background: #fff; color: var(--bg); }
+
+/* ---- 0.6: small picture, Live TV and TV guide pages */
+#player.mini { right: auto; bottom: auto; z-index: 3; border-radius: 20px; overflow: hidden; box-shadow: 0 0 0 2px rgba(255,255,255,.1); }
+#player.mini .banner, #player.mini .bar, #player.mini .livebar, #player.mini .subline { display: none; }
+#player.mini .spinner { width: 44px; height: 44px; margin: -22px 0 0 -22px; }
+.mini-slot { background: #000; border-radius: 20px; flex: none; }
+.live .groups { width: 380px; }
+.live .info-col { width: 640px; padding-right: 50px; padding-top: 52px; }
+.live .mini-slot { width: 590px; height: 332px; }
+.now-card { flex: 1; margin-top: 22px; background: var(--panel); border-radius: 22px; padding: 24px 28px; overflow: hidden; margin-bottom: 40px; }
+.nc-head { display: flex; align-items: center; margin-bottom: 12px; }
+.nc-name { font-size: 28px; font-weight: 700; margin-right: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-card .lb-now { font-size: 28px; }
+.now-card .lb-bar { margin: 12px 0; }
+.nc-desc { color: var(--muted); font-size: 21px; line-height: 1.4; max-height: 88px; overflow: hidden; margin-bottom: 8px; }
+.live .channels .row-item .name .sub { font-size: 20px; }
+.tvg-head { display: flex; align-items: flex-start; height: 280px; }
+.tvg-left { flex: 1; min-width: 0; margin-right: 34px; }
+.tvg-left h1 { font-size: 50px; margin-bottom: 14px; }
+.tvg-left .tvg-info { height: 190px; }
+.tvg-left .tvg-info .info-desc { -webkit-line-clamp: 2; max-height: 62px; }
+.guide-mini { width: 448px; height: 252px; }
+.tvg-tools { padding: 12px 4px 12px; }
+.tvg-tools .keyhint { margin-left: 0; }
+.live .groups { width: 330px; }
+.live .info-col { width: 560px; padding-right: 44px; }
+.live .mini-slot { width: 516px; height: 290px; }
+.live .channels .logo-box { width: 92px; height: 58px; }
+.live .channels .row-item { padding: 12px 18px; }
+.live .channels .row-item .zap-num { min-width: 40px; font-size: 21px; }

@@ -170,7 +170,12 @@ var STRINGS = {
   "day_before": "Day before yesterday",
   "channel_numbers": "channel number",
   "favorite_added": "Added to favourites: {0}",
-  "library_updated": "Library updated"
+  "library_updated": "Library updated",
+  "ok_full": "OK again: full screen",
+  "ok_preview": "OK: watch in the small picture",
+  "channel_number_jump": "type a number: go to that channel",
+  "countries_first": "Countries first",
+  "countries_text": "Channels, films and series of these countries come first, then the rest. OK adds or removes a country; the number is the order."
  },
  "nl": {
   "nav_discover": "Ontdekken",
@@ -342,7 +347,12 @@ var STRINGS = {
   "day_before": "Eergisteren",
   "channel_numbers": "zendernummer",
   "favorite_added": "In favorieten: {0}",
-  "library_updated": "Bibliotheek bijgewerkt"
+  "library_updated": "Bibliotheek bijgewerkt",
+  "ok_full": "OK nog eens: volledig scherm",
+  "ok_preview": "OK: kijken in het kleine beeld",
+  "channel_number_jump": "nummer intikken: naar die zender",
+  "countries_first": "Landen eerst",
+  "countries_text": "Zenders, films en series van deze landen komen eerst, daarna de rest. OK voegt een land toe of haalt het weg; het nummer is de volgorde."
  },
  "fr": {
   "nav_discover": "Découvrir",
@@ -514,7 +524,12 @@ var STRINGS = {
   "day_before": "Avant-hier",
   "channel_numbers": "numéro de chaîne",
   "favorite_added": "Ajouté aux favoris : {0}",
-  "library_updated": "Bibliothèque mise à jour"
+  "library_updated": "Bibliothèque mise à jour",
+  "ok_full": "OK à nouveau : plein écran",
+  "ok_preview": "OK : regarder dans la petite image",
+  "channel_number_jump": "tapez un numéro : aller à la chaîne",
+  "countries_first": "Pays en premier",
+  "countries_text": "Les chaînes, films et séries de ces pays viennent en premier, puis le reste. OK ajoute ou retire un pays ; le numéro indique l’ordre."
  },
  "de": {
   "nav_discover": "Entdecken",
@@ -686,7 +701,12 @@ var STRINGS = {
   "day_before": "Vorgestern",
   "channel_numbers": "Sendernummer",
   "favorite_added": "Zu Favoriten hinzugefügt: {0}",
-  "library_updated": "Mediathek aktualisiert"
+  "library_updated": "Mediathek aktualisiert",
+  "ok_full": "Nochmal OK: Vollbild",
+  "ok_preview": "OK: im kleinen Bild ansehen",
+  "channel_number_jump": "Nummer eingeben: zum Sender",
+  "countries_first": "Länder zuerst",
+  "countries_text": "Sender, Filme und Serien dieser Länder kommen zuerst, dann der Rest. OK fügt ein Land hinzu oder entfernt es; die Zahl ist die Reihenfolge."
  }
 };
 if (typeof module !== "undefined") module.exports = STRINGS;

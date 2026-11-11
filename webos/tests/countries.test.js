@@ -1,0 +1,20 @@
+const test = require("node:test");
+const assert = require("node:assert");
+const C = require("../js/countries.js");
+test("country detection like Zono for Windows", () => {
+  assert.equal(C.detectText("BE | VTM"), "BE");
+  assert.equal(C.detectText("NL: NPO 1"), "NL");
+  assert.equal(C.detectText("|FR| TF1"), "FR");
+  assert.equal(C.detectText("[UK] Sky News"), "UK");
+  assert.equal(C.detectText("Vlaamse films"), "BE");
+  assert.equal(C.detectText("4K | Sport"), "");
+  assert.equal(C.detectText("ALL | Films"), "");
+  assert.equal(C.detectText("GB: BBC One"), "UK");
+  assert.equal(C.detect({ kind: "live", group: "Sport", title: "VRT 1" }), "BE");
+  assert.equal(C.detect({ kind: "live", group: "Sport", title: "NPO 2 HD" }), "NL");
+  assert.equal(C.detect({ kind: "movie", group: "Actie", title: "VRT story" }), "", "brands only for channels");
+  assert.equal(C.detect({ kind: "movie", group: "NL | Films", title: "x" }), "NL");
+  assert.equal(C.name("BE", "nl"), "België");
+  assert.equal(C.rank("NL", ["BE", "NL"]), 1);
+  assert.equal(C.rank("FR", ["BE", "NL"]), 2);
+});

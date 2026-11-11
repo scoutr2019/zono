@@ -30,6 +30,17 @@
   .small { font-size: 14px; margin: 10px 0 0; }
   .note { font-size: 13px; color: var(--muted); margin-top: 22px; }
   [hidden] { display: none !important; }
+  .steps { display: flex; gap: 6px; margin: 0 0 16px; }
+  .steps span { flex: 1; height: 5px; border-radius: 3px; background: var(--raised); }
+  .steps span.on { background: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .chips button { padding: 10px 14px; border-radius: 999px; border: 2px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 15px; }
+  .chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .row2 { display: flex; gap: 10px; margin-top: 20px; }
+  .row2 .send { margin-top: 0; }
+  .back { flex: 0 0 auto; padding: 15px 20px; border-radius: 999px; border: 0; background: var(--raised); color: var(--text); font: inherit; }
+  .step h2 { font-size: 19px; margin: 0 0 4px; }
+  .step p { margin: 0 0 12px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -55,24 +66,47 @@
     <div id="m3u" hidden>
       <label for="link" data-t="link"></label><input id="link" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://...">
     </div>
-    <button class="send" id="send" type="submit" data-t="send"></button>
+    <button class="send" id="send" type="submit" data-t="next"></button>
     <div class="msg" id="msg" role="status"></div>
   </form>
+  <div id="wizard" class="card" hidden>
+    <div class="steps"><span class="on"></span><span id="dot2"></span><span id="dot3"></span><span id="dot4"></span></div>
+    <div class="step" id="step-countries">
+      <h2 data-t="countries"></h2><p data-t="countrieshelp"></p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="step" id="step-language" hidden>
+      <h2 data-t="language"></h2>
+      <div class="chips" id="langs"></div>
+    </div>
+    <div class="step" id="step-name" hidden>
+      <h2 data-t="name"></h2><p data-t="namehelp"></p>
+      <input id="name" maxlength="20" autocomplete="given-name">
+    </div>
+    <div class="row2"><button class="back" id="back" type="button">‹</button><button class="send" id="next" type="button" data-t="next"></button></div>
+    <div class="msg" id="msg2" role="status"></div>
+  </div>
   <div class="note" data-t="privacy"></div>
 </main>
 <script src="nacl.min.js"></script>
 <script>
 (function () {
   var TEXT = {
-    nl: { title: "Log in op Zono op je tv", intro: "Vul je IPTV-gegevens in. Ze gaan versleuteld naar je tv.", m3u: "M3U-link", server: "Server", user: "Gebruikersnaam", password: "Wachtwoord", link: "Link van je M3U-afspeellijst", send: "Naar mijn tv sturen", sending: "Versturen…", done: "Klaar! Kijk nu naar je tv.", fields: "Vul alle velden in.", expired: "Deze code is verlopen. Toon een nieuwe QR-code op je tv en scan opnieuw.", failed: "Versturen lukte niet. Controleer je internet en probeer opnieuw.", badlink: "Deze link is niet volledig. Scan de QR-code op je tv opnieuw.", privacy: "Je gegevens worden op je gsm versleuteld met een sleutel die alleen je tv kent. zono.be kan ze niet lezen en wist ze na 10 minuten.",
+    nl: { next: "Volgende", countries: "Welke landen wil je eerst zien?", countrieshelp: "Zenders, films en series van deze landen komen bovenaan, daarna de rest. Kies er meerdere of niets voor alles.", all: "Alles", language: "In welke taal mag Zono staan?", name: "Hoe mag Zono je noemen?", namehelp: "Bijvoorbeeld bij \u201cGoedemiddag, …\u201d. Mag leeg blijven.", title: "Log in op Zono op je tv", intro: "Vul je IPTV-gegevens in. Ze gaan versleuteld naar je tv.", m3u: "M3U-link", server: "Server", user: "Gebruikersnaam", password: "Wachtwoord", link: "Link van je M3U-afspeellijst", send: "Naar mijn tv sturen", sending: "Versturen…", done: "Klaar! Kijk nu naar je tv.", fields: "Vul alle velden in.", expired: "Deze code is verlopen. Toon een nieuwe QR-code op je tv en scan opnieuw.", failed: "Versturen lukte niet. Controleer je internet en probeer opnieuw.", badlink: "Deze link is niet volledig. Scan de QR-code op je tv opnieuw.", privacy: "Je gegevens worden op je gsm versleuteld met een sleutel die alleen je tv kent. zono.be kan ze niet lezen en wist ze na 10 minuten.",
       subtitle: "OpenSubtitles op je tv", subintro: "Plak je gratis sleutel van opensubtitles.com. Die gaat versleuteld naar je tv.", key: "API-sleutel", keyhelp: "Maak een account op opensubtitles.com en kies daarna Consumers → New consumer: daar staat je API key." },
-    fr: { title: "Connectez Zono sur votre TV", intro: "Saisissez vos données IPTV. Elles sont envoyées chiffrées à votre TV.", m3u: "Lien M3U", server: "Serveur", user: "Nom d’utilisateur", password: "Mot de passe", link: "Lien de votre playlist M3U", send: "Envoyer à ma TV", sending: "Envoi…", done: "C’est fait ! Regardez votre TV.", fields: "Remplissez tous les champs.", expired: "Ce code a expiré. Affichez un nouveau QR code sur votre TV et scannez-le à nouveau.", failed: "L’envoi a échoué. Vérifiez votre connexion et réessayez.", badlink: "Ce lien est incomplet. Scannez à nouveau le QR code sur votre TV.", privacy: "Vos données sont chiffrées sur votre téléphone avec une clé que seule votre TV connaît. zono.be ne peut pas les lire et les efface après 10 minutes.",
+    fr: { next: "Suivant", countries: "Quels pays voulez-vous voir en premier ?", countrieshelp: "Les chaînes, films et séries de ces pays apparaissent en premier, puis le reste. Choisissez-en plusieurs ou aucun pour tout.", all: "Tout", language: "Dans quelle langue Zono doit-il s\u2019afficher ?", name: "Comment Zono doit-il vous appeler ?", namehelp: "Par exemple dans \u201cBon après-midi, …\u201d. Facultatif.", title: "Connectez Zono sur votre TV", intro: "Saisissez vos données IPTV. Elles sont envoyées chiffrées à votre TV.", m3u: "Lien M3U", server: "Serveur", user: "Nom d’utilisateur", password: "Mot de passe", link: "Lien de votre playlist M3U", send: "Envoyer à ma TV", sending: "Envoi…", done: "C’est fait ! Regardez votre TV.", fields: "Remplissez tous les champs.", expired: "Ce code a expiré. Affichez un nouveau QR code sur votre TV et scannez-le à nouveau.", failed: "L’envoi a échoué. Vérifiez votre connexion et réessayez.", badlink: "Ce lien est incomplet. Scannez à nouveau le QR code sur votre TV.", privacy: "Vos données sont chiffrées sur votre téléphone avec une clé que seule votre TV connaît. zono.be ne peut pas les lire et les efface après 10 minutes.",
       subtitle: "OpenSubtitles sur votre TV", subintro: "Collez votre clé gratuite d’opensubtitles.com. Elle est envoyée chiffrée à votre TV.", key: "Clé API", keyhelp: "Créez un compte sur opensubtitles.com puis choisissez Consumers → New consumer : votre API key s’y trouve." },
-    en: { title: "Sign in to Zono on your TV", intro: "Enter your IPTV details. They are sent to your TV encrypted.", m3u: "M3U link", server: "Server", user: "Username", password: "Password", link: "Link to your M3U playlist", send: "Send to my TV", sending: "Sending…", done: "Done! Now look at your TV.", fields: "Fill in all fields.", expired: "This code has expired. Show a new QR code on your TV and scan it again.", failed: "Sending failed. Check your internet connection and try again.", badlink: "This link is incomplete. Scan the QR code on your TV again.", privacy: "Your details are encrypted on your phone with a key only your TV knows. zono.be cannot read them and deletes them after 10 minutes.",
+    en: { next: "Next", countries: "Which countries do you want to see first?", countrieshelp: "Channels, films and series of these countries come first, then the rest. Choose several, or none for everything.", all: "Everything", language: "Which language should Zono use?", name: "What should Zono call you?", namehelp: "For example in \u201cGood afternoon, …\u201d. May stay empty.", title: "Sign in to Zono on your TV", intro: "Enter your IPTV details. They are sent to your TV encrypted.", m3u: "M3U link", server: "Server", user: "Username", password: "Password", link: "Link to your M3U playlist", send: "Send to my TV", sending: "Sending…", done: "Done! Now look at your TV.", fields: "Fill in all fields.", expired: "This code has expired. Show a new QR code on your TV and scan it again.", failed: "Sending failed. Check your internet connection and try again.", badlink: "This link is incomplete. Scan the QR code on your TV again.", privacy: "Your details are encrypted on your phone with a key only your TV knows. zono.be cannot read them and deletes them after 10 minutes.",
       subtitle: "OpenSubtitles on your TV", subintro: "Paste your free key from opensubtitles.com. It is sent to your TV encrypted.", key: "API key", keyhelp: "Make an account on opensubtitles.com, then choose Consumers → New consumer: your API key is there." },
-    de: { title: "Zono auf deinem Fernseher anmelden", intro: "Gib deine IPTV-Daten ein. Sie werden verschlüsselt an deinen Fernseher gesendet.", m3u: "M3U-Link", server: "Server", user: "Benutzername", password: "Passwort", link: "Link zu deiner M3U-Playlist", send: "An meinen Fernseher senden", sending: "Wird gesendet…", done: "Fertig! Schau jetzt auf deinen Fernseher.", fields: "Fülle alle Felder aus.", expired: "Dieser Code ist abgelaufen. Zeig einen neuen QR-Code auf dem Fernseher und scanne ihn erneut.", failed: "Senden fehlgeschlagen. Prüfe deine Internetverbindung und versuche es erneut.", badlink: "Dieser Link ist unvollständig. Scanne den QR-Code auf deinem Fernseher erneut.", privacy: "Deine Daten werden auf dem Handy mit einem Schlüssel verschlüsselt, den nur dein Fernseher kennt. zono.be kann sie nicht lesen und löscht sie nach 10 Minuten.",
+    de: { next: "Weiter", countries: "Welche Länder möchtest du zuerst sehen?", countrieshelp: "Sender, Filme und Serien dieser Länder kommen zuerst, dann der Rest. Wähle mehrere oder keins für alles.", all: "Alles", language: "In welcher Sprache soll Zono sein?", name: "Wie soll Zono dich nennen?", namehelp: "Zum Beispiel bei \u201eGuten Tag, …\u201c. Darf leer bleiben.", title: "Zono auf deinem Fernseher anmelden", intro: "Gib deine IPTV-Daten ein. Sie werden verschlüsselt an deinen Fernseher gesendet.", m3u: "M3U-Link", server: "Server", user: "Benutzername", password: "Passwort", link: "Link zu deiner M3U-Playlist", send: "An meinen Fernseher senden", sending: "Wird gesendet…", done: "Fertig! Schau jetzt auf deinen Fernseher.", fields: "Fülle alle Felder aus.", expired: "Dieser Code ist abgelaufen. Zeig einen neuen QR-Code auf dem Fernseher und scanne ihn erneut.", failed: "Senden fehlgeschlagen. Prüfe deine Internetverbindung und versuche es erneut.", badlink: "Dieser Link ist unvollständig. Scanne den QR-Code auf deinem Fernseher erneut.", privacy: "Deine Daten werden auf dem Handy mit einem Schlüssel verschlüsselt, den nur dein Fernseher kennt. zono.be kann sie nicht lesen und löscht sie nach 10 Minuten.",
       subtitle: "OpenSubtitles auf deinem Fernseher", subintro: "Füge deinen kostenlosen Schlüssel von opensubtitles.com ein. Er wird verschlüsselt an deinen Fernseher gesendet.", key: "API-Schlüssel", keyhelp: "Lege ein Konto auf opensubtitles.com an und wähle Consumers → New consumer: Dort steht dein API key." }
   };
+  var COUNTRIES = { BE: ["België", "Belgique", "Belgium", "Belgien"], NL: ["Nederland", "Pays-Bas", "Netherlands", "Niederlande"],
+    FR: ["Frans", "Français", "French", "Französisch"], DE: ["Duits", "Allemand", "German", "Deutsch"], UK: ["Verenigd Koninkrijk", "Royaume-Uni", "United Kingdom", "UK"],
+    US: ["Verenigde Staten", "États-Unis", "United States", "USA"], ES: ["Spaans", "Espagnol", "Spanish", "Spanisch"], IT: ["Italiaans", "Italien", "Italian", "Italienisch"],
+    PT: ["Portugees", "Portugais", "Portuguese", "Portugiesisch"], TR: ["Turks", "Turc", "Turkish", "Türkisch"], PL: ["Pools", "Polonais", "Polish", "Polnisch"],
+    AR: ["Arabisch", "Arabe", "Arabic", "Arabisch"], MA: ["Marokko", "Maroc", "Morocco", "Marokko"], RO: ["Roemenië", "Roumanie", "Romania", "Rumänien"],
+    AL: ["Albanië", "Albanie", "Albania", "Albanien"], EXYU: ["Ex-Joegoslavië", "Ex-Yougoslavie", "Ex-Yugoslavia", "Ex-Jugoslawien"], IN: ["India", "Inde", "India", "Indien"] };
   var lang = (navigator.language || "nl").slice(0, 2).toLowerCase();
   var params = location.hash.slice(1).split(".");
   if (params[2] && TEXT[params[2]]) lang = params[2]; // the TV's language
@@ -102,26 +136,66 @@
     document.querySelector("h1").textContent = T.subtitle;
     document.querySelector("h1 + p").textContent = T.subintro;
     document.querySelector(".tabs").hidden = true; $("xtream").hidden = true; $("subs").hidden = false;
+    $("send").textContent = T.send;
   }
   function tab(on) { xtream = on; $("tab-x").setAttribute("aria-pressed", on); $("tab-m").setAttribute("aria-pressed", !on); $("xtream").hidden = !on; $("m3u").hidden = on; }
   $("tab-x").onclick = function () { tab(true); };
   $("tab-m").onclick = function () { tab(false); };
   function say(text, kind) { var m = $("msg"); m.textContent = text; m.className = "msg " + (kind || ""); }
 
+  // ---- after the login: countries, language, name (then everything goes to the TV in one locked message)
+  var chosen = [], appLang = TEXT[params[2]] ? params[2] : lang, step = 0, pending = null;
+  var LANGS = [["nl", "Nederlands"], ["fr", "Français"], ["en", "English"], ["de", "Deutsch"]];
+  var col = { nl: 0, fr: 1, en: 2, de: 3 }[lang] || 0;
+  function chip(text, on, click) { var b = document.createElement("button"); b.type = "button"; b.textContent = text; b.setAttribute("aria-pressed", on); b.onclick = click; return b; }
+  function drawChips() {
+    var box = $("chips"); box.innerHTML = "";
+    box.appendChild(chip(T.all, !chosen.length, function () { chosen = []; drawChips(); }));
+    Object.keys(COUNTRIES).forEach(function (c) {
+      var n = chosen.indexOf(c);
+      box.appendChild(chip((n >= 0 ? (n + 1) + ". " : "") + COUNTRIES[c][col], n >= 0, function () { if (n >= 0) chosen.splice(n, 1); else chosen.push(c); drawChips(); }));
+    });
+  }
+  function drawLangs() {
+    var box = $("langs"); box.innerHTML = "";
+    LANGS.forEach(function (l) { box.appendChild(chip(l[1], l[0] === appLang, function () { appLang = l[0]; drawLangs(); })); });
+  }
+  function showStep(n) {
+    step = n;
+    ["step-countries", "step-language", "step-name"].forEach(function (id, i) { $(id).hidden = i !== n; });
+    ["dot2", "dot3", "dot4"].forEach(function (id, i) { $(id).className = i <= n ? "on" : ""; });
+    $("next").textContent = n === 2 ? T.send : T.next;
+  }
+  $("back").onclick = function () { if (step === 0) { $("wizard").hidden = true; $("form").hidden = false; } else showStep(step - 1); };
+  $("next").onclick = function () {
+    if (step < 2) return showStep(step + 1);
+    pending.countries = chosen.slice(); pending.language = appLang;
+    var name = $("name").value.trim(); if (name) pending.name = name;
+    send(pending, $("next"), $("msg2"));
+  };
+
+  function send(login, button, msg) {
+    function tell(text, kind) { msg.textContent = text; msg.className = "msg " + (kind || ""); }
+    var nonce = nacl.randomBytes(24);
+    var box = nacl.secretbox(new TextEncoder().encode(JSON.stringify(login)), nonce, key);
+    var data = new Uint8Array(nonce.length + box.length); data.set(nonce); data.set(box, nonce.length);
+    button.disabled = true; tell(T.sending);
+    fetch("/api/pair.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", code: code, data: toB64(data) }) })
+      .then(function (r) {
+        if (r.ok) { tell(T.done, "good"); $("password").value = ""; return; }
+        button.disabled = false; tell(r.status === 404 ? T.expired : T.failed, "bad");
+      }, function () { button.disabled = false; tell(T.failed, "bad"); });
+  }
+
   $("form").onsubmit = function (e) {
     e.preventDefault();
     var login = subsMode ? { type: "settings", opensubtitles: $("subkey").value.trim() } : xtream ? { type: "xtream", server: $("server").value.trim(), user: $("user").value.trim(), password: $("password").value }
       : { type: "m3u", m3u: $("link").value.trim() };
     if (subsMode ? login.opensubtitles.length < 10 : xtream ? !(login.server && login.user && login.password) : !/^https?:\/\//i.test(login.m3u)) return say(T.fields, "bad");
-    var nonce = nacl.randomBytes(24);
-    var box = nacl.secretbox(new TextEncoder().encode(JSON.stringify(login)), nonce, key);
-    var data = new Uint8Array(nonce.length + box.length); data.set(nonce); data.set(box, nonce.length);
-    $("send").disabled = true; say(T.sending);
-    fetch("/api/pair.php", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", code: code, data: toB64(data) }) })
-      .then(function (r) {
-        if (r.ok) { say(T.done, "good"); $("password").value = ""; return; }
-        $("send").disabled = false; say(r.status === 404 ? T.expired : T.failed, "bad");
-      }, function () { $("send").disabled = false; say(T.failed, "bad"); });
+    if (subsMode) return send(login, $("send"), $("msg"));
+    pending = login;
+    $("form").hidden = true; $("wizard").hidden = false;
+    drawChips(); drawLangs(); showStep(0);
   };
 })();
 </script>

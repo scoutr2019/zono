@@ -245,12 +245,26 @@
     return parts.slice(0, 2).map(function (p) { return p[0].toUpperCase(); }).join("") || "Z";
   }
 
-  /** The shelves the screens show. */
-  function shelves(all, uhd) {
+  /** The shelves the screens show. `chosen`: country codes the viewer wants first (item.cc), in order. */
+  function shelves(all, uhd, chosen) {
+    chosen = chosen || [];
+    function rank(i) { if (!chosen.length) return 0; var k = chosen.indexOf(i.cc || ""); return k < 0 ? chosen.length : k; }
+    function byRank(list) {
+      if (!chosen.length) return list;
+      return list.map(function (x, n) { return [rank(x), n, x]; }).sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; }).map(function (a) { return a[2]; });
+    }
     var providerLive = all.filter(function (i) { return i.kind === "live"; });
-    var live = uhd ? uhdFirst(providerLive) : providerLive;
-    var movies = all.filter(function (i) { return i.kind === "movie"; });
-    var series = all.filter(function (i) { return i.kind === "series"; });
+    var live = byRank(uhd ? uhdFirst(providerLive) : providerLive);
+    var movies = byRank(all.filter(function (i) { return i.kind === "movie"; }));
+    var series = byRank(all.filter(function (i) { return i.kind === "series"; }));
+    /** Groups in the provider's order; the chosen countries' groups first (then 4K groups when asked). */
+    function groups(list, withUhd) {
+      var order = groupsOf(list, withUhd);
+      if (!chosen.length) return order;
+      var best = {};
+      list.forEach(function (i) { var r = rank(i); if (!(i.group in best) || r < best[i.group]) best[i.group] = r; });
+      return order.map(function (g, n) { return [best[g], n, g]; }).sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; }).map(function (a) { return a[2]; });
+    }
     /** The `n` best by `score` without sorting the whole (possibly huge) list. */
     function top(list, score, n) {
       var best = [];
@@ -264,12 +278,18 @@
       }
       return best.map(function (b) { return b.item; });
     }
-    function newest(list) { return top(list, function (i) { return i.added || 0; }, 30); }
+    /** The chosen countries first; filled up with the rest. */
+    function prefer(list, score) {
+      if (!chosen.length) return top(list, score, 30);
+      var mine = top(list.filter(function (x) { return rank(x) < chosen.length; }), score, 30);
+      return mine.length >= 30 ? mine : mine.concat(top(list.filter(function (x) { return rank(x) >= chosen.length; }), score, 30 - mine.length));
+    }
+    var added = function (i) { return i.added || 0; };
     return {
-      all: all, live: live, movies: movies, series: series,
-      liveGroups: groupsOf(providerLive, uhd), movieGroups: groupsOf(movies), seriesGroups: groupsOf(series),
-      newMovies: newest(movies), newSeries: newest(series),
-      topMovies: top(movies, function (i) { return i.rating >= 7 ? i.rating : 0; }, 30),
+      all: all, live: live, movies: movies, series: series, chosen: chosen,
+      liveGroups: groups(providerLive, uhd), movieGroups: groups(movies), seriesGroups: groups(series),
+      newMovies: prefer(movies, added), newSeries: prefer(series, added),
+      topMovies: prefer(movies, function (i) { return i.rating >= 7 ? i.rating : 0; }),
       uhdChannels: live.filter(itemUhd).slice(0, 30),
     };
   }

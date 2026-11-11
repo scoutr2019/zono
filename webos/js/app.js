@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "0.5.0";
+  var VERSION = "0.6.0";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
   var API = window.ZONO_API || "https://zono.be/api";
@@ -181,6 +181,7 @@
     S.recent = pload("recent", []);
     S.reminders = pload("reminders", []);
     S.hidden = pload("hidden", []);
+    S.countries = pload("countries", []);
   }
   loadProfileData();
 
@@ -194,7 +195,7 @@
       if (anyHidden && hidden[(i.kind === "episode" ? "series" : i.kind) + "|" + i.group]) return false;
       return !(kids && (i.adult || (i.q === undefined && (Guide.adult(i.group) || Guide.adult(i.title)))));
     });
-    S.shelves = Catalog.shelves(visible, S.uhd);
+    S.shelves = Catalog.shelves(visible, S.uhd, S.countries);
     S.byId = null; // built when first needed (see find)
     // channel numbers: the provider's own (num / tvg-chno) or the position in the list
     S.numbers = {};
@@ -292,8 +293,8 @@
     if (cached && Date.now() - cached.at < 10 * 60000 && (cached.full || !full)) return Promise.resolve(cached.rows);
     if (S.source.type === "xtream" && item.sid) {
       var url = Catalog.apiUrl(S.source, full ? "get_simple_data_table" : "get_short_epg", full ? { stream_id: item.sid } : { stream_id: item.sid, limit: "8" });
-      return json(url).then(function (data) {
-        var rows = Guide.xtreamPrograms(data);
+      return work({ type: "epg", url: url }).then(function (m) {
+        var rows = m.rows || [];
         if (!rows.length && full) return programsFor(item, false);
         epgCache[item.id] = { at: Date.now(), full: full, rows: rows };
         return rows;
@@ -436,7 +437,7 @@
   }
   function picture(src, cls) {
     if (!src) return null;
-    var img = h("img", { src: src, alt: "", cls: cls });
+    var img = h("img", { src: src, alt: "", cls: cls, decoding: "async" });
     img.onerror = function () { img.remove(); };
     return img;
   }
@@ -575,6 +576,7 @@
     if (!S.source) app.appendChild(loginScreen());
     else if (S.choosing) app.appendChild(profilesScreen());
     else app.appendChild(homeScreen());
+    if (P.mini && !app.querySelector(".mini-slot")) stopMini();
     if (!sheetOpen()) restoreFocus(keep);
   }
 
@@ -634,6 +636,9 @@
         }
         if (!got || (got.type !== "xtream" && got.type !== "m3u") || pair.mode !== "login") return startPairing();
         stopPairing();
+        if (got.language && STRINGS[got.language]) { save("language", got.language); pickLanguage(); }
+        if (got.name) { var list = profiles(); list[0].name = String(got.name).slice(0, 20); saveProfiles(list); }
+        if (Array.isArray(got.countries)) { save(pkey("countries"), got.countries.filter(function (c) { return /^[A-Z]{2,4}$/.test(c); }).slice(0, 10)); loadProfileData(); }
         login.xtream = got.type === "xtream";
         login.server = got.server || ""; login.user = got.user || ""; login.password = got.password || ""; login.m3u = got.m3u || "";
         toast(T("phone_received"));
@@ -916,29 +921,24 @@
       } },
       { label: T("cancel"), go: closeSheet }] });
   }
-  function liveInfo(pane, channel) {
-    pane.innerHTML = "";
-    pane.appendChild(h("div", { cls: "info-channel" }, [h("div", { cls: "logo-box big" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
-      h("div", null, [h("div", { cls: "info-title", text: channel.title }), channel.archive ? h("div", { cls: "info-tag" }, [withIcon("replay", T("catchup"))]) : null])]));
-    var body = h("div", { cls: "info-body" }, [h("div", { cls: "spinner small" })]);
-    pane.appendChild(body);
+  /** Now / next of a channel in a card (Live TV page). */
+  function nowCard(card, channel) {
+    card.innerHTML = "";
+    card.appendChild(h("div", { cls: "nc-head" }, [h("span", { cls: "lb-num", text: String(numberOf(channel) || "") }), h("span", { cls: "nc-name", text: channel.title }),
+      Catalog.itemUhd(channel) ? h("span", { cls: "badge", text: "4K" }) : null, channel.archive ? withIcon("replay", T("catchup"), "lb-tag") : null]));
+    var body = h("div", { cls: "nc-body" });
+    card.appendChild(body);
     programsFor(channel, false).then(function (rows) {
-      if (pane._channel !== channel) return;
-      var nn = Guide.nowNext(rows, nowSeconds(), 4);
-      body.innerHTML = "";
+      if (card._channel !== channel) return;
+      var nn = Guide.nowNext(rows, nowSeconds(), 3);
       if (!nn.now && !nn.next.length) { body.appendChild(h("div", { cls: "empty", text: T("no_guide") })); return; }
       if (nn.now) {
-        var p = nn.now, frac = (nowSeconds() - p.start) / (p.end - p.start);
-        body.appendChild(h("div", { cls: "info-label", text: T("now") + " · " + hm(p.start) + " – " + hm(p.end) }));
-        body.appendChild(h("div", { cls: "info-now", text: p.title }));
-        body.appendChild(h("div", { cls: "info-bar" }, [h("div", { style: "width:" + Math.round(frac * 100) + "%" })]));
-        if (p.desc) body.appendChild(h("div", { cls: "info-desc", text: p.desc }));
+        var p = nn.now;
+        body.appendChild(h("div", { cls: "lb-now" }, [h("span", { cls: "lb-time", text: hm(p.start) + " – " + hm(p.end) }), h("span", { cls: "lb-title", text: p.title })]));
+        body.appendChild(h("div", { cls: "lb-bar" }, [h("div", { style: "width:" + Math.round((nowSeconds() - p.start) / (p.end - p.start) * 100) + "%" })]));
+        if (p.desc) body.appendChild(h("div", { cls: "nc-desc", text: p.desc }));
       }
-      if (nn.next.length) {
-        body.appendChild(h("div", { cls: "info-label", text: T("later") }));
-        nn.next.forEach(function (n) { body.appendChild(h("div", { cls: "info-next" }, [h("span", { cls: "time", text: hm(n.start) }), h("span", { text: n.title })])); });
-      }
-      body.appendChild(h("div", { cls: "info-hint", text: T("guide_hint") }));
+      nn.next.forEach(function (n) { body.appendChild(h("div", { cls: "info-next" }, [h("span", { cls: "time", text: hm(n.start) }), h("span", { text: n.title })])); });
     });
   }
   function liveScreen() {
@@ -953,33 +953,40 @@
     var groupList = h("div", { cls: "scroll-y" });
     lazyList(groupList, groups, function (g) {
       var name = g === FAV ? T("favorites") : groupName(g);
-      return rowItem(name, function () { liveGroup = g; render(); }, { lead: g === FAV ? icon("heartFill", "lead") : null, sel: g === liveGroup, badge: g !== FAV && Catalog.isUhd(g) ? "4K" : "", key: "g-" + g,
-        long: g === FAV ? null : function () { askHide("live", g); } });
+      return rowItem(name, function () { liveGroup = g; render(); focusFirst(".channels"); }, { lead: g === FAV ? icon("heartFill", "lead") : null, sel: g === liveGroup,
+        badge: g !== FAV && Catalog.isUhd(g) ? "4K" : "", key: "g-" + g, long: g === FAV ? null : function () { askHide("live", g); } });
     }, 60);
-    var pane = h("div", { cls: "live-info" });
+    var slot = h("div", { cls: "mini-slot" }), card = h("div", { cls: "now-card" });
     var channelList = h("div", { cls: "scroll-y" });
     if (!channels.length) channelList.appendChild(h("div", { cls: "empty", text: T("empty_group") }));
+    function pick(c, now) {
+      card._channel = c;
+      clearTimeout(infoTimer);
+      infoTimer = setTimeout(function () {
+        if (card._channel !== c) return;
+        nowCard(card, c);
+        // the small picture follows you, once you stop on a channel for a moment
+        clearTimeout(mini.follow);
+        mini.follow = setTimeout(function () { if (card._channel === c && card.parentNode) miniPlay(c, slot); }, now ? 0 : 900);
+      }, now ? 0 : 250);
+    }
     lazyList(channelList, channels, function (c) {
-      var num = numberOf(c);
-      return rowItem(c.title, function () { playChannel(c, channels); }, {
-        image: c.image || "", badge: Catalog.itemUhd(c) ? "4K" : "", trail: isFavorite(c.id) ? withIcon("heartFill", String(num)) : String(num), key: "c-" + c.id,
+      var cached = epgCache[c.id], nn = cached && Guide.nowNext(cached.rows, nowSeconds(), 0);
+      return rowItem(c.title, function () { if (mini.channel === c) miniToFull(); else playChannel(c, channels); }, {
+        image: c.image || "", lead: h("span", { cls: "zap-num", text: String(numberOf(c) || "") }), sub: nn && nn.now ? nn.now.title : " ",
+        badge: Catalog.itemUhd(c) ? "4K" : "", trail: isFavorite(c.id) ? icon("heartFill") : "", key: "c-" + c.id,
         long: function () { toggleFavorite(c); render(); },
-        onfocus: function () {
-          clearTimeout(infoTimer);
-          pane._channel = c;
-          infoTimer = setTimeout(function () { if (pane._channel === c) liveInfo(pane, c); }, 250);
-        },
+        onfocus: function () { pick(c, false); },
       });
     });
-    if (channels.length) { pane._channel = channels[0]; setTimeout(function () { if (pane._channel === channels[0] && pane.parentNode) liveInfo(pane, channels[0]); }, 50); }
-    var guideButton = h("div", { cls: "live-guide-btn" }, [button(T("guide_and_catchup"), function () {
-      var c = pane._channel || channels[0]; if (c) openGuide(c);
-    }, { icon: "grid", key: "live-guide" })]);
+    var last = find(S.recent[0]);
+    var start = (mini.channel && channels.indexOf(mini.channel) >= 0) ? mini.channel : last && channels.indexOf(last) >= 0 ? last : channels[0];
+    if (start) setTimeout(function () { if (slot.parentNode) pick(start, true); }, 30);
     return h("div", { cls: "live" }, [
       h("div", { cls: "groups" }, [h("h2", { text: T("groups"), style: "padding-left:24px" }), groupList]),
       h("div", { cls: "channels" }, [h("h2", { style: "padding-left:24px" }, [liveGroup === FAV ? T("favorites") : groupName(liveGroup),
         h("span", { cls: "hint", text: T("hold_ok_favorite") })]), channelList]),
-      h("div", { cls: "info-col" }, [pane, guideButton])]);
+      h("div", { cls: "info-col" }, [slot, card])]);
   }
 
   // ---- the guide of one channel, with catch-up and reminders
@@ -1037,89 +1044,104 @@
   }
   function dayStart(day) { var d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + day); return d.getTime() / 1000; }
   function tvGuideScreen() {
-    var sh = S.shelves, ALL = "\u0000all", ppm = TVG.ppm;
-    var channels = TVG.group === ALL ? sh.live : sh.live.filter(function (c) { return c.group === TVG.group; });
+    var sh = S.shelves, ppm = TVG.ppm, channels = sh.live;
     var start = dayStart(TVG.day), full = 24 * 60 * ppm, view = 1060;
     var nowX = (nowSeconds() - start) / 60 * ppm;
     if (TVG.offset === null) TVG.offset = TVG.day === 0 ? nowX - 30 * ppm : (new Date().getHours() * 60 - 30) * ppm;
     TVG.offset = Math.max(0, Math.min(full - view, TVG.offset));
     var lanes = [];
     function apply() { lanes.forEach(function (l) { l.style.transform = "translateX(" + (-TVG.offset) + "px)"; }); }
-    function shift(px) { TVG.offset = Math.max(0, Math.min(full - view, TVG.offset + px)); apply(); }
     var info = h("div", { cls: "tvg-info" }, [h("div", { cls: "hint", text: T("guide_intro") })]);
     function show(channel, p) {
       var live = p.start <= nowSeconds() && p.end > nowSeconds(), past = p.end <= nowSeconds(), back = past && Guide.canCatchUp(channel, p);
       info.innerHTML = "";
-      info.appendChild(h("div", { cls: "info-label", text: channel.title + " · " + dayName(p.start) + " " + hm(p.start) + " – " + hm(p.end) }));
+      info.appendChild(h("div", { cls: "info-label", text: numberOf(channel) + " " + channel.title + " · " + dayName(p.start) + " " + hm(p.start) + " – " + hm(p.end) }));
       info.appendChild(h("div", { cls: "info-now", text: p.title }));
       if (p.desc) info.appendChild(h("div", { cls: "info-desc", text: p.desc }));
-      info.appendChild(h("div", { cls: "info-hint", text: live ? T("ok_watch") : back ? T("ok_catchup") : past ? "" : T("ok_remind") }));
+      info.appendChild(h("div", { cls: "info-hint", text: live ? (mini.channel === channel ? T("ok_full") : T("ok_preview")) : back ? T("ok_catchup") : past ? "" : T("ok_remind") }));
     }
-    // header: title, groups with counts, days, now, earlier/later
-    var counts = {}; sh.live.forEach(function (c) { counts[c.group] = (counts[c.group] || 0) + 1; });
-    function chip(label, count, sel, go, key) {
-      return h("div", { cls: "pill" + (sel ? " sel" : ""), go: go, "data-key": key }, [label, count !== null ? h("span", { cls: "count", text: count.toLocaleString(lang) }) : null]);
-    }
-    var groupChips = h("div", { cls: "scroll-x tvg-groups" }, [chip(T("all"), sh.live.length, TVG.group === ALL, function () { TVG.group = ALL; render(); }, "tg-all")]
-      .concat(sh.liveGroups.map(function (g) { return chip(groupName(g), counts[g] || 0, TVG.group === g, function () { TVG.group = g; render(); }, "tg-" + g); })));
+    var slot = h("div", { cls: "mini-slot guide-mini" });
     var days = [[-2, "day_before"], [-1, "yesterday"], [0, "today"], [1, "tomorrow"]].map(function (d) {
       return h("div", { cls: "pill small" + (TVG.day === d[0] ? " sel" : ""), go: function () { TVG.day = d[0]; TVG.offset = null; render(); }, "data-key": "td" + d[0] },
         [d[0] < 0 ? icon("replay", "lead") : null, T(d[1])]);
     });
-    var tools = h("div", { cls: "tvg-tools" }, days.concat([h("div", { cls: "tvg-space" }), h("span", { cls: "hint" }, [icon("replay", "lead"), "= " + T("catchup").toLowerCase()]),
+    var tools = h("div", { cls: "tvg-tools" }, days.concat([
       h("div", { cls: "pill small", go: function () { TVG.day = 0; TVG.offset = null; render(); focusFirst(".tvg-box.now"); }, "data-key": "t-now" }, [icon("clock", "lead"), T("now")]),
-      h("div", { cls: "pill small round", go: function () { shift(-120 * ppm); }, "data-key": "t-prev" }, [icon("left")]),
-      h("div", { cls: "pill small round", go: function () { shift(120 * ppm); }, "data-key": "t-next" }, [icon("right")])]));
-    // time ruler
+      h("div", { cls: "tvg-space" }), keyHint(["1", "2"], T("channel_number_jump"))]));
     var ruler = h("div", { cls: "tvg-lane ruler", style: "width:" + full + "px" });
     for (var m = 0; m < 24 * 60; m += 30) ruler.appendChild(h("div", { cls: "tick", style: "left:" + (m * ppm) + "px", text: (m / 60 < 10 ? "0" : "") + Math.floor(m / 60) + ":" + (m % 60 ? "30" : "00") }));
     if (TVG.day === 0) ruler.appendChild(h("div", { cls: "now-label", style: "left:" + nowX + "px", text: hm(nowSeconds()) }));
     lanes.push(ruler);
     var body = h("div", { cls: "tvg-body scroll-y" });
     if (!channels.length) body.appendChild(h("div", { cls: "empty", text: T("empty_group") }));
+    /** OK on what is on now: first in the small picture, a second OK: full screen. */
+    function watch(channel) { if (mini.channel === channel) miniToFull(); else miniPlay(channel, slot); }
     lazyList(body, channels, function (channel) {
       var lane = h("div", { cls: "tvg-lane", style: "width:" + full + "px" });
       if (TVG.day === 0) lane.appendChild(h("div", { cls: "now-line", style: "left:" + nowX + "px" }));
       lanes.push(lane);
       lane.style.transform = "translateX(" + (-TVG.offset) + "px)";
-      var num = numberOf(channel);
-      var cell = h("div", { cls: "tvg-channel", go: function () { playChannel(channel, channels); }, "data-key": "tc-" + channel.id }, [
-        h("span", { cls: "num", text: String(num) }), h("div", { cls: "logo-box" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
+      var cell = h("div", { cls: "tvg-channel", go: function () { watch(channel); }, "data-key": "tc-" + channel.id }, [
+        h("span", { cls: "num", text: String(numberOf(channel)) }), h("div", { cls: "logo-box" }, [channel.image ? picture(channel.image) : h("span", { text: Catalog.initials(channel.title) })]),
         h("span", { cls: "cname", text: channel.title })]);
-      limited(function () { return programsFor(channel, TVG.day !== 0); }).then(function (rows) {
-        var end = start + 86400, now = nowSeconds(), any = false;
-        (rows || []).forEach(function (p) {
-          if (p.end <= start || p.start >= end) return;
-          any = true;
-          var left = Math.max(0, (p.start - start) / 60 * ppm), right = Math.min(full, (p.end - start) / 60 * ppm);
-          var live = p.start <= now && p.end > now, past = p.end <= now, back = past && Guide.canCatchUp(channel, p, now);
-          var box = h("div", { cls: "tvg-box" + (live ? " now" : "") + (past && !back ? " past" : ""), style: "left:" + left + "px;width:" + Math.max(24, right - left - 6) + "px",
-            "data-key": "tb-" + channel.id + "-" + p.start,
-            go: function () {
-              if (live) playChannel(channel, channels);
-              else if (back) playCatchup(channel, p);
-              else if (!past) { toggleReminder(channel, p); bell.hidden = !reminderFor(channel, p); }
-            },
-            long: function () { openGuide(channel); },
-            onfocus: function () {
-              // keep the focused programme in view
-              if (left < TVG.offset + 20 && right < TVG.offset + 260 || left > TVG.offset + view - 160) { TVG.offset = Math.max(0, Math.min(full - view, left - 60)); apply(); }
-              show(channel, p);
-            } });
-          var bell = icon("bell", "lead"); bell.hidden = !reminderFor(channel, p);
-          box.appendChild(h("div", { cls: "t" }, [bell, back ? icon("replay", "lead") : null, live ? icon("dot", "lead red") : null, p.title || "—"]));
-          box.appendChild(h("div", { cls: "s", text: hm(p.start) + " – " + hm(p.end) }));
-          lane.appendChild(box);
-        });
+      var shownStarts = {}, any = false;
+      function addBox(p) {
+        var end = start + 86400, now = nowSeconds();
+        if (p.end <= start || p.start >= end || shownStarts[p.start]) return;
+        shownStarts[p.start] = 1; any = true;
+        var left = Math.max(0, (p.start - start) / 60 * ppm), right = Math.min(full, (p.end - start) / 60 * ppm);
+        var live = p.start <= now && p.end > now, past = p.end <= now, back = past && Guide.canCatchUp(channel, p, now);
+        var bell = icon("bell", "lead"); bell.hidden = !reminderFor(channel, p);
+        var box = h("div", { cls: "tvg-box" + (live ? " now" : "") + (past && !back ? " past" : ""), style: "left:" + left + "px;width:" + Math.max(24, right - left - 6) + "px",
+          "data-key": "tb-" + channel.id + "-" + p.start,
+          go: function () {
+            if (live) { watch(channel); show(channel, p); }
+            else if (back) { stopMini(); playCatchup(channel, p); }
+            else if (!past) { toggleReminder(channel, p); bell.hidden = !reminderFor(channel, p); }
+          },
+          long: function () { openGuide(channel); },
+          onfocus: function () {
+            if (left < TVG.offset + 20 && right < TVG.offset + 260 || left > TVG.offset + view - 160) { TVG.offset = Math.max(0, Math.min(full - view, left - 60)); apply(); }
+            show(channel, p);
+            // today first shows now and next (quick); the earlier programmes come in when you are on the row
+            if (!lane._full) { lane._full = true; limited(function () { return programsFor(channel, true); }).then(function (all) { (all || []).forEach(addBox); }); }
+          } });
+        box.appendChild(h("div", { cls: "t" }, [bell, back ? icon("replay", "lead") : null, live ? icon("dot", "lead red") : null, p.title || "—"]));
+        box.appendChild(h("div", { cls: "s", text: hm(p.start) + " – " + hm(p.end) }));
+        lane.appendChild(box);
+      }
+      lane._full = true;
+      limited(function () { return programsFor(channel, true); }).then(function (rows) {
+        (rows || []).forEach(addBox);
         if (!any) lane.appendChild(h("div", { cls: "tvg-none", style: "left:" + TVG.offset + "px", text: T("no_guide") }));
+        if (TVG.jump === channel) { TVG.jump = null; focus(lane.querySelector(".tvg-box.now") || cell); }
       });
-      return h("div", { cls: "tvg-row" }, [cell, h("div", { cls: "tvg-track" }, [lane])]);
+      return h("div", { cls: "tvg-row", "data-channel": channel.id }, [cell, h("div", { cls: "tvg-track" }, [lane])]);
     }, 25);
+    var first = (mini.channel && channels.indexOf(mini.channel) >= 0) ? mini.channel : find(S.recent[0]) || channels[0];
+    if (first) setTimeout(function () { if (slot.parentNode) miniPlay(first, slot); }, 400);
+    TVG.body = body;
     return h("div", { cls: "tvg" }, [
-      h("div", { cls: "tvg-head" }, [h("div", { cls: "tvg-title" }, [h("h1", { text: T("nav_guide") }), h("div", { cls: "hint", text: T("guide_intro") })]), info]),
-      groupChips, tools,
+      h("div", { cls: "tvg-head" }, [h("div", { cls: "tvg-left" }, [h("h1", { text: T("nav_guide") }), info]), slot]),
+      tools,
       h("div", { cls: "tvg-row ruler-row" }, [h("div", { cls: "tvg-channel blank" }), h("div", { cls: "tvg-track" }, [ruler])]),
       body]);
+  }
+  /** A channel number typed on the TV guide: the grid goes to that channel and the small picture shows it. */
+  function guideJump(channel) {
+    var body = TVG.body;
+    if (!body || !body.parentNode) return;
+    var tries = 0, row;
+    while (!(row = body.querySelector('[data-channel="' + (window.CSS && CSS.escape ? CSS.escape(channel.id) : channel.id) + '"]')) && body._more && tries++ < 2000) {
+      var before = body.children.length; body._more(); if (body.children.length === before) break;
+    }
+    if (!row) return toast(T("no_channel", numberOf(channel)));
+    TVG.jump = channel;
+    var box = row.querySelector(".tvg-box.now");
+    focus(box || row.querySelector(".tvg-channel"));
+    if (box) TVG.jump = null;
+    var slot = app.querySelector(".guide-mini");
+    if (slot) miniPlay(channel, slot);
   }
 
   // ---- movies and series
@@ -1128,7 +1150,8 @@
     var ALL = "\u0000all", current = gridGroup[kind];
     if (current !== ALL && groups.indexOf(current) < 0) current = gridGroup[kind] = ALL;
     var cache = S.shelves._sorted || (S.shelves._sorted = {});
-    var shown = current === ALL ? (cache[kind] || (cache[kind] = items.slice().sort(function (a, b) { return (b.added || 0) - (a.added || 0); })))
+    var chosen = S.countries, rank = function (i) { var k = chosen.indexOf(i.cc || ""); return k < 0 ? chosen.length : k; };
+    var shown = current === ALL ? (cache[kind] || (cache[kind] = items.slice().sort(function (a, b) { return (chosen.length ? rank(a) - rank(b) : 0) || (b.added || 0) - (a.added || 0); })))
       : items.filter(function (i) { return i.group === current; });
     var hideKind = kind === "movies" ? "movie" : "series";
     var pills = h("div", { cls: "scroll-x", style: "padding:12px 8px" }, [pill(T("all"), current === ALL, function () { gridGroup[kind] = ALL; render(); }, "p-all")]
@@ -1286,6 +1309,7 @@
       h("h2", { text: T("nav_live") }),
       rowItem(T("uhd_first"), function () { S.uhd = !S.uhd; save("uhd", S.uhd); buildShelves(); render(); }, { trail: T(S.uhd ? "on" : "off"), key: "uhd" }),
       rowItem(T("reminders"), remindersSheet, { trail: String(S.reminders.length), key: "reminders" }),
+      rowItem(T("countries_first"), countriesSheet, { trail: S.countries.length ? S.countries.join(", ") : T("all"), key: "countries" }),
       h("h2", { text: T("subtitles"), style: "margin-top:44px" }),
       rowItem(T("sub_language"), function () {
         sheet({ title: T("sub_language"), items: [["nl", "Nederlands"], ["fr", "Français"], ["en", "English"], ["de", "Deutsch"]].map(function (l) {
@@ -1325,6 +1349,25 @@
     parts.push(rowItem(T("report"), reportSheet, { key: "report" }));
     parts.push(h("div", { cls: "empty", style: "margin-top:44px;color:var(--dim)", text: T("version", VERSION) + " · " + T("test_build") + " · zono.be/privacy.html" }));
     return h("div", { cls: "scroll-y" }, [h("div", { cls: "page", style: "max-width:1300px" }, parts)]);
+  }
+  /** Which countries first: the ones in this library, most channels and films first. */
+  function countriesSheet() {
+    var count = {};
+    S.items.forEach(function (i) { if (i.cc) count[i.cc] = (count[i.cc] || 0) + 1; });
+    var codes = Object.keys(count).sort(function (a, b) { return count[b] - count[a]; }).slice(0, 24);
+    S.countries.forEach(function (c) { if (codes.indexOf(c) < 0) codes.unshift(c); });
+    function toggle(code) {
+      var at = S.countries.indexOf(code);
+      if (at >= 0) S.countries.splice(at, 1); else S.countries.push(code);
+      psave("countries", S.countries); countriesSheet();
+    }
+    sheet({ title: T("countries_first"), text: T("countries_text"), wide: true, onClose: function () { buildShelves(); render(); }, items: [
+      { label: T("all"), sel: !S.countries.length, trail: !S.countries.length ? icon("check") : "", go: function () { S.countries = []; psave("countries", []); countriesSheet(); } }]
+      .concat(codes.map(function (c) {
+        var n = S.countries.indexOf(c);
+        return { label: Countries.name(c, lang), sub: (count[c] || 0).toLocaleString(lang) + " · " + c, sel: n >= 0, trail: n >= 0 ? String(n + 1) : "", key: "cc-" + c, go: function () { toggle(c); } };
+      })).concat([{ label: T("done"), go: closeSheet }]) });
+    var keep = sheetEl.querySelector(".row-item.sel"); if (keep) focus(keep);
   }
   function remindersSheet() {
     var items = S.reminders.map(function (r) {
@@ -1477,7 +1520,7 @@
     if (best) focus(best);
   }
 
-  var okTarget = null, okTimer = null, lastBack = 0, lastInput = null;
+  var okTarget = null, okTimer = null, lastBack = 0, lastInput = null, lastMove = 0;
   function back() {
     var a = document.activeElement;
     if (a && a.tagName === "INPUT") { lastInput = a; a.blur(); return; } // closes the TV keyboard; arrows go on from the field
@@ -1498,7 +1541,12 @@
       if ((k === KEY.LEFT && !atStart) || (k === KEY.RIGHT && !atEnd)) return;
     }
     var dir = { 37: "left", 38: "up", 39: "right", 40: "down" }[k];
-    if (dir) { e.preventDefault(); move(dir, scope); return; }
+    if (dir) {
+      e.preventDefault();
+      if (e.repeat && Date.now() - lastMove < 80) return; // the TV keeps up instead of lagging behind
+      lastMove = Date.now();
+      move(dir, scope); return;
+    }
     if (k === KEY.OK && a && a._go) {
       e.preventDefault();
       if (typing) { a.blur(); a.focus(); return; } // opens the TV keyboard
@@ -1574,6 +1622,7 @@
       var n = parseInt(number.typed, 10), channel = S.numbers[n];
       number.typed = ""; numbox.classList.remove("on");
       if (!channel) return toast(T("no_channel", n));
+      if (!playerOpen() && S.page === "guide" && !S.guideFor && !S.detail && !S.series) return guideJump(channel);
       playChannel(channel, S.shelves.live);
     }, 1500);
   }
@@ -1581,12 +1630,48 @@
   // ------------------------------------------------------------------ player
   var P = { queue: [], index: 0, retried: false, saveTimer: null, hideTimer: null, returnFocus: null, previous: null, programs: null, subs: null };
   var player = document.getElementById("player"), video = document.getElementById("video");
-  function playerOpen() { return !player.hidden; }
+  function playerOpen() { return !player.hidden && !P.mini; }
+  var mini = { channel: null, slot: null, follow: null };
+  /** Position of an element in page pixels (the page is laid out at 1920x1080 and zoomed as a whole). */
+  function pagePos(el) { var x = 0, y = 0; for (var n = el; n && n !== document.body; n = n.offsetParent) { x += n.offsetLeft - (n.scrollLeft || 0); y += n.offsetTop - (n.scrollTop || 0); } return { x: x, y: y }; }
+  function miniPlay(channel, slot) {
+    if (!channel || !slot || !slot.parentNode || sheetOpen()) return;
+    var at = pagePos(slot);
+    player.style.left = at.x + "px"; player.style.top = at.y + "px";
+    player.style.width = slot.offsetWidth + "px"; player.style.height = slot.offsetHeight + "px";
+    mini.slot = slot;
+    if (P.mini && mini.channel === channel && player.classList.contains("mini")) return;
+    P.mini = true; mini.channel = channel;
+    player.classList.add("mini"); player.hidden = false;
+    var list = S.shelves.live, index = list.indexOf(channel);
+    P.queue = index >= 0 ? list : [channel]; P.index = Math.max(0, index);
+    startItem(false);
+  }
+  function stopMini() {
+    clearTimeout(mini.follow);
+    if (!P.mini) return;
+    P.mini = false; mini.channel = null;
+    player.classList.remove("mini"); player.removeAttribute("style");
+    clearInterval(P.saveTimer);
+    video.pause(); video.removeAttribute("src"); video.load();
+    player.hidden = true;
+  }
+  /** From the small picture to full screen, without starting the stream again. */
+  function miniToFull() {
+    if (!P.mini) return;
+    P.mini = false; mini.channel = null;
+    player.classList.remove("mini"); player.removeAttribute("style");
+    P.returnFocus = currentKey();
+    var item = current();
+    save(pkey("last"), item.id); addRecent(item.id);
+    liveBar(item, epgCache[item.id] && epgCache[item.id].rows);
+  }
   function current() { return P.queue[P.index]; }
   function isLive() { var it = current(); return it && it.kind === "live"; }
 
   function play(queue, index) {
     if (!queue.length) return;
+    if (P.mini) { P.mini = false; mini.channel = null; player.classList.remove("mini"); player.removeAttribute("style"); player.hidden = true; }
     if (playerOpen() && isLive() && queue[index] && queue[index].kind === "live") P.previous = { queue: P.queue, index: P.index };
     P.queue = queue.slice(); P.index = Math.max(0, Math.min(index, queue.length - 1));
     if (!playerOpen()) P.returnFocus = currentKey();
@@ -1620,7 +1705,8 @@
     }
     if (isLive()) { var seekBar = document.getElementById("bar"); seekBar.classList.remove("on"); seekBar.hidden = true; }
     else hideLiveBar();
-    if (isLive()) { save(pkey("last"), item.id); addRecent(item.id); hideBanner(); liveBar(item, epgCache[item.id] && epgCache[item.id].rows); loadNowNext(item); }
+    if (P.mini) { hideLiveBar(); hideBanner(); loadNowNext(item); }
+    else if (isLive()) { save(pkey("last"), item.id); addRecent(item.id); hideBanner(); liveBar(item, epgCache[item.id] && epgCache[item.id].rows); loadNowNext(item); }
     spinner(true);
     var p = video.play(); if (p && p.catch) p.catch(function () {});
     if (!isLive()) banner(item.title, info);
@@ -1654,7 +1740,7 @@
   function loadNowNext(item) {
     programsFor(item, false).then(function (rows) {
       P.programs = rows;
-      if (current() === item && livebar.classList.contains("on") && !livebar.classList.contains("beside")) liveBar(item, rows);
+      if (!P.mini && current() === item && livebar.classList.contains("on") && !livebar.classList.contains("beside")) liveBar(item, rows);
     }, function () {});
   }
   /** The channel list over the picture: the TV keeps playing; moving through it previews what's on. */
@@ -1750,7 +1836,7 @@
       return startItem(false);
     }
     spinner(false);
-    banner(item.title, T("playback_error"));
+    if (!P.mini) banner(item.title, T("playback_error"));
   });
   video.addEventListener("ended", function () {
     var item = current();
@@ -1903,6 +1989,7 @@
 
   document.addEventListener("visibilitychange", function () {
     if (document.hidden && playerOpen()) { remember(); video.pause(); }
+    if (document.hidden && P.mini) stopMini();
   });
 
   // ------------------------------------------------------------------ go
@@ -1916,5 +2003,5 @@
   start();
   setInterval(checkReminders, 15000);
   setTimeout(ping, 20000);
-  window.Zono = { state: S, render: render, buildShelves: buildShelves, version: VERSION, pair: pair, checkReminders: checkReminders, ping: ping, log: LOG }; // for tests
+  window.Zono = { state: S, render: render, buildShelves: buildShelves, mini: mini, P: P, version: VERSION, pair: pair, checkReminders: checkReminders, ping: ping, log: LOG }; // for tests
 })();
