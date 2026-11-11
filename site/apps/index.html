@@ -6,25 +6,14 @@
 <title>Zono TV · Op je tv</title>
 <meta name="description" content="Zono op je LG-tv of Android TV zetten, stap voor stap.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHg9IjY0IiB5PSI2NCIgd2lkdGg9Ijg5NiIgaGVpZ2h0PSI4OTYiIHJ4PSIyNDUiIGZpbGw9IiM1MzUwZjYiLz4KICA8cGF0aCBkPSJNMzA0IDM0MEg3MTVWNDM4TDQ0OSA2OTdINzE4Vjc5OEgzMDFWNjk2TDU2OCA0MzhIMzA0WiIgZmlsbD0iI2ZmZiIvPgogIDxjaXJjbGUgY3g9Ijc0OSIgY3k9Ijc3MCIgcj0iNDkiIGZpbGw9IiNmZmQzNjUiLz4KPC9zdmc+Cg==">
+<link rel="stylesheet" href="/site.css">
 <style>
-:root{--ink:#10101b;--violet:#514eff;--deep:#4b4aef;--paper:#f7f6ff;--line:rgba(19,17,42,.12);--muted:#5d5a72;--yellow:#ffd365;--soft:#efedff}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 Manrope,"Segoe UI",system-ui,sans-serif}
-a{color:var(--violet)}
-header{background:radial-gradient(circle at 85% 0,#8c71ff 0,transparent 35%),linear-gradient(135deg,#4b4aef,#763df7);color:#fff;padding:26px clamp(16px,6vw,90px) 96px}
-.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;font-weight:800;font-size:22px}
-.brand i{width:34px;height:34px;border-radius:11px;background:#fff;color:var(--deep);display:grid;place-items:center;font-style:normal;font-weight:900}
-.langs{display:flex;gap:6px;flex-wrap:wrap}
-.langs button{font:inherit;cursor:pointer;color:#fff;background:none;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
-.langs button[aria-current=true]{background:#fff;color:var(--deep)}
-h1{font:900 clamp(36px,6vw,64px)/1 "Nunito",system-ui,sans-serif;letter-spacing:-.04em;margin:46px 0 12px}
-header p{max-width:660px;color:rgba(255,255,255,.88);font-size:18px;margin:0}
-main{max-width:920px;margin:-64px auto 60px;padding:0 16px}
+:root{--deep:#4b4aef;--yellow:var(--sun);--soft:#efedff}
+main{max-width:940px;margin:-70px auto 70px;padding:0 24px;position:relative}
+main a{color:var(--violet)}
 .card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:26px clamp(18px,4vw,36px);margin-bottom:16px;box-shadow:0 18px 40px rgba(38,26,120,.06)}
-h2{font:800 24px/1.2 "Nunito",system-ui,sans-serif;margin:0 0 8px}
-h3{font:800 18px/1.3 "Nunito",system-ui,sans-serif;margin:0 0 4px}
+main h2{font:800 26px/1.2 var(--display);margin:0 0 8px}
+main h3{font:800 19px/1.3 var(--display);margin:0 0 4px}
 .muted,small{color:var(--muted)}
 /* choose your tv */
 .pick{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
@@ -65,20 +54,38 @@ kbd{font:800 13px/1 system-ui,sans-serif;border:1px solid var(--line);border-bot
 details{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px 20px;margin-bottom:10px}
 summary{cursor:pointer;font-weight:800}
 details p{margin:8px 0 2px}
-footer{text-align:center;color:var(--muted);font-size:14px;padding:0 16px 40px}
 [hidden]{display:none!important}
 @media(max-width:640px){.pick{grid-template-columns:1fr}ol.steps>li{padding:66px 16px 16px}ol.steps>li::before{left:16px;top:16px}}
 </style>
 </head>
 <body>
-<header>
-  <div class="top">
-    <a class="brand" href="/"><i>z</i>zono tv</a>
-    <nav class="langs" aria-label="Taal / Language"><button data-pick="nl">Nederlands</button><button data-pick="fr">Français</button><button data-pick="en">English</button><button data-pick="de">Deutsch</button></nav>
+<header class="bar solid">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Zono">
+      <svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="64" y="64" width="896" height="896" rx="245" fill="#5350f6"/><path d="M304 340H715V438L449 697H718V798H301V696L568 438H304Z" fill="#fff"/><circle cx="749" cy="770" r="49" fill="#ffd365"/></svg>
+      zono <small>tv</small>
+    </a>
+    <nav class="nav" aria-label="Menu">
+      <a href="/#toestellen" data-s="navDevices"></a>
+      <a href="/#samen" data-s="navTogether"></a>
+      <a href="/#rondleiding" data-s="navTour"></a>
+      <a href="/#vragen" data-s="navFaq"></a>
+    </nav>
+    <div class="langs">
+      <button type="button" id="lang-toggle" aria-haspopup="true" aria-expanded="false"></button>
+      <ul id="lang-menu" hidden>
+        <li><button type="button" data-lang="nl">Nederlands</button></li>
+        <li><button type="button" data-lang="fr">Français</button></li>
+        <li><button type="button" data-lang="en">English</button></li>
+        <li><button type="button" data-lang="de">Deutsch</button></li>
+      </ul>
+    </div>
   </div>
+</header>
+<section class="page-head"><div class="wrap">
   <h1 data-t="title"></h1>
   <p data-t="lead"></p>
-</header>
+</div></section>
 <main>
   <div class="pick" role="group">
     <button class="device" data-device="android" aria-pressed="true">
@@ -108,7 +115,19 @@ footer{text-align:center;color:var(--muted);font-size:14px;padding:0 16px 40px}
   <div id="faq"></div>
   <div class="card note"><p data-t="playerOnly" style="margin:0"></p></div>
 </main>
-<footer>© 2026 Zono TV · <a href="/">zono.be</a> · <a href="/privacy.html">Privacy</a> · <a href="mailto:support@zono.be">support@zono.be</a> · <a href="https://github.com/scoutr2019/zono/tree/main/tv">GitHub</a></footer>
+<footer class="site">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Zono"><svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="64" y="64" width="896" height="896" rx="245" fill="#5350f6"/><path d="M304 340H715V438L449 697H718V798H301V696L568 438H304Z" fill="#fff"/><circle cx="749" cy="770" r="49" fill="#ffd365"/></svg>zono</a>
+    <nav aria-label="Footer">
+      <a href="/apps/" data-keep-lang="/apps/" data-s="footTv"></a>
+      <a href="/privacy.html" data-keep-lang="/privacy.html" data-s="footPrivacy"></a>
+      <a href="https://github.com/scoutr2019/zono" target="_blank" rel="noopener">GitHub</a>
+      <a href="mailto:support@zono.be">support@zono.be</a>
+    </nav>
+    <p class="small" data-s="footSmall"></p>
+  </div>
+</footer>
+<script src="/site.js"></script>
 <script>
 /* The newest TV version comes from GitHub (folder tv/: Zono-TV.apk, Zono-TV.ipk, version.json):
    nothing on this page has to change for a new version. */
@@ -331,7 +350,6 @@ function render() {
   document.documentElement.lang = lang;
   document.title = "Zono TV · " + t.title;
   document.querySelectorAll("[data-t]").forEach(function (e) { e.innerHTML = t[e.getAttribute("data-t")]; });
-  document.querySelectorAll("[data-pick]").forEach(function (b) { b.setAttribute("aria-current", String(b.getAttribute("data-pick") === lang)); });
   document.querySelectorAll("[data-device]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-device") === device)); });
   var android = device === "android";
   document.getElementById("get").href = GH + (android ? "Zono-TV.apk" : "Zono-TV.ipk");
@@ -349,19 +367,12 @@ function showVersion() {
   var when = new Date(release.date + "T12:00:00").toLocaleDateString(LOCALE[lang], { day: "numeric", month: "long", year: "numeric" });
   document.getElementById("version").textContent = T[lang].version + " " + release.version + " · " + when + (bytes ? " · " + (bytes / 1048576).toFixed(1) + " MB" : "");
 }
-document.querySelectorAll("[data-pick]").forEach(function (b) { b.onclick = function () {
-  lang = b.getAttribute("data-pick"); try { localStorage.setItem("zono-language", lang); } catch (e) {} render();
-}; });
 document.querySelectorAll("[data-device]").forEach(function (b) { b.onclick = function () {
   device = b.getAttribute("data-device"); history.replaceState(null, "", "#" + device); render();
 }; });
 (function () {
-  var pick = new URLSearchParams(location.search).get("lang");
-  try { pick = pick || localStorage.getItem("zono-language"); } catch (e) {}
-  if (!T[pick]) { var b = (navigator.language || "nl").slice(0, 2); pick = T[b] ? b : "nl"; }
-  lang = pick;
   if (location.hash === "#lg" || (!location.hash && /web0s|webos|netcast/i.test(navigator.userAgent))) device = "lg";
-  render();
+  Site.start(function (next) { lang = T[next] ? next : "nl"; render(); });
   fetch("https://raw.githubusercontent.com/scoutr2019/zono/main/tv/version.json", { cache: "no-store" })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (data) { if (data && data.version) { release = data; showVersion(); } else document.getElementById("version").textContent = ""; })

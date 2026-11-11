@@ -6,52 +6,13 @@
 <title>Zono · je eigen tv, op elk scherm</title>
 <meta name="description" content="Zono speelt je eigen IPTV-abonnement af op Windows, LG en Android TV. Begin op het ene scherm, kijk verder op het andere.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHg9IjY0IiB5PSI2NCIgd2lkdGg9Ijg5NiIgaGVpZ2h0PSI4OTYiIHJ4PSIyNDUiIGZpbGw9IiM1MzUwZjYiLz4KICA8cGF0aCBkPSJNMzA0IDM0MEg3MTVWNDM4TDQ0OSA2OTdINzE4Vjc5OEgzMDFWNjk2TDU2OCA0MzhIMzA0WiIgZmlsbD0iI2ZmZiIvPgogIDxjaXJjbGUgY3g9Ijc0OSIgY3k9Ijc3MCIgcj0iNDkiIGZpbGw9IiNmZmQzNjUiLz4KPC9zdmc+Cg==">
-<link rel="preload" href="fonts/Nunito-900.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/Nunito-900.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css">
 <style>
-@font-face{font-family:"Nunito";font-weight:800;font-display:swap;src:url("fonts/Nunito-800.woff2") format("woff2")}
-@font-face{font-family:"Nunito";font-weight:900;font-display:swap;src:url("fonts/Nunito-900.woff2") format("woff2")}
-@font-face{font-family:"DM Sans";font-weight:400;font-display:swap;src:url("fonts/DMSans-400.woff2") format("woff2")}
-@font-face{font-family:"DM Sans";font-weight:500;font-display:swap;src:url("fonts/DMSans-500.woff2") format("woff2")}
-@font-face{font-family:"DM Sans";font-weight:700;font-display:swap;src:url("fonts/DMSans-700.woff2") format("woff2")}
-:root{
-  --night:#16133a; --night-2:#211d52; --violet:#5350f6; --violet-soft:#8c8afc; --sun:#ffd34d;
-  --paper:#f5f4ff; --ink:#1d1a3f; --mist:#a7a4d9; --muted:#5b587e; --line:rgba(29,26,63,.12); --line-dark:rgba(255,255,255,.14);
-  --display:"Nunito",ui-rounded,system-ui,sans-serif; --text:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --wrap:1180px;
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.6 var(--text);-webkit-font-smoothing:antialiased}
-a{color:inherit}
-img{display:block;max-width:100%;height:auto}
-:focus-visible{outline:3px solid var(--sun);outline-offset:3px;border-radius:6px}
-.wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
-h1,h2,h3{font-family:var(--display);font-weight:900;letter-spacing:-.025em;margin:0}
-h2{font-size:clamp(34px,4.6vw,54px);line-height:1.02}
+:root{--muted:#45426a}
+.hero h2,.devices h2,.together h2,.tour h2,.news h2,.faq h2{font-size:clamp(34px,4.6vw,54px);line-height:1.02}
 h3{font-size:22px;font-weight:800;letter-spacing:-.01em}
-p{margin:0}
-.btn{display:inline-flex;align-items:center;gap:10px;font:700 16px/1 var(--text);text-decoration:none;border-radius:999px;padding:16px 24px;border:0;cursor:pointer;transition:transform .15s,background .15s}
-.btn:hover{transform:translateY(-1px)}
-.btn svg{width:18px;height:18px;flex:none}
-.btn.sun{background:var(--sun);color:var(--night)}
-.btn.line{background:transparent;color:#fff;box-shadow:inset 0 0 0 2px rgba(255,255,255,.35)}
-.btn.violet{background:var(--violet);color:#fff}
-.btn.quiet{background:transparent;color:var(--violet);padding:16px 6px}
 
-/* ---- top bar */
-.bar{position:absolute;top:0;left:0;right:0;z-index:5}
-.bar .wrap{display:flex;align-items:center;gap:28px;height:84px}
-.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff;font:900 26px/1 var(--display);letter-spacing:-.03em}
-.brand svg{width:38px;height:38px}
-.brand small{font:800 13px/1 var(--display);background:var(--violet);border-radius:7px;padding:4px 6px;letter-spacing:0}
-.nav{display:flex;gap:26px;margin-left:auto}
-.nav a{color:rgba(255,255,255,.82);text-decoration:none;font-weight:500}
-.nav a:hover{color:#fff}
-.langs{position:relative}
-.langs button{font:600 14px/1 var(--text);color:#fff;background:rgba(255,255,255,.1);border:0;border-radius:999px;padding:10px 14px;cursor:pointer}
-.langs ul{position:absolute;right:0;top:calc(100% + 8px);list-style:none;margin:0;padding:6px;background:#fff;border-radius:14px;box-shadow:0 18px 40px rgba(10,8,40,.3);min-width:150px}
-.langs li button{display:block;width:100%;text-align:left;color:var(--ink);background:none;border-radius:9px;padding:10px 12px}
-.langs li button:hover,.langs li button[aria-current=true]{background:var(--paper)}
 
 /* ---- hero */
 .hero{background:radial-gradient(1200px 600px at 75% 15%,#2b2670 0,transparent 60%),var(--night);color:#fff;padding:150px 0 110px;overflow:hidden}
@@ -68,7 +29,10 @@ p{margin:0}
 .screens{position:relative;aspect-ratio:1.18}
 .tv{position:absolute;right:0;top:0;width:88%}
 .tv .panel{background:#05040f;border-radius:14px;padding:9px;box-shadow:0 40px 80px rgba(5,3,30,.55)}
+.tv .panel{position:relative}
 .tv .panel img{border-radius:6px;aspect-ratio:16/9;object-fit:cover;width:100%;background:#0d0b22}
+.tv .panel img.next{position:absolute;left:9px;top:9px;width:calc(100% - 18px);opacity:0;transition:opacity .8s ease}
+.tv .panel img.next.on{opacity:1}
 .tv .foot{width:34%;height:14px;margin:0 auto;background:linear-gradient(#2a2752,#14122e);border-radius:0 0 10px 10px}
 .laptop{position:absolute;left:0;bottom:0;width:54%}
 .laptop .lid{background:#0b0a1c;border-radius:12px 12px 0 0;padding:8px 8px 10px;box-shadow:0 30px 60px rgba(5,3,30,.6)}
@@ -82,9 +46,44 @@ p{margin:0}
 .chip.to{right:7%;top:38%;opacity:0}
 .trail{position:absolute;inset:0;pointer-events:none;overflow:visible}
 .trail path{fill:none;stroke:rgba(255,211,77,.45);stroke-width:2;stroke-dasharray:4 7;stroke-dashoffset:0}
-.play .chip.to{animation:arrive .5s 2.9s ease-out forwards}
+.play .chip.to{animation:arrive .5s 3.3s ease-out forwards}
 @keyframes arrive{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.chip.to{opacity:1}.play .chip.to{animation:none}}
+@media (prefers-reduced-motion:no-preference){
+  /* the page opens: the words rise, the screens slide in, then the dot travels */
+  .hero h1 span,.hero .lead,.hero .actions,.hero .release,.hero .note{animation:rise .8s cubic-bezier(.2,.7,.2,1) both}
+  .hero h1 span:nth-child(2){animation-delay:.12s}
+  .hero .lead{animation-delay:.25s}.hero .actions{animation-delay:.38s}.hero .release,.hero .note{animation-delay:.5s}
+  .tv{animation:fromRight 1s .2s cubic-bezier(.2,.7,.2,1) both}
+  .laptop{animation:fromBelow 1s .4s cubic-bezier(.2,.7,.2,1) both}
+  .chip.from{animation:pop .5s 1.1s cubic-bezier(.3,1.4,.5,1) both}
+  .chip.to i::after{transition:width 1.2s .3s ease}
+  .chip.to.go i::after{width:60%}
+  .hero .btn.sun{animation:rise .8s .38s cubic-bezier(.2,.7,.2,1) both,glow 2.8s 4s ease-in-out infinite}
+  /* "stop here, continue there": the pc card fills, the dot runs down, the tv card lights up, again and again */
+  .together.seen .card:first-child i::after{animation:fill 6s ease-in-out infinite}
+  .together.seen .runner{animation:run 6s ease-in-out infinite}
+  .together.seen .card.later{animation:light 6s ease-in-out infinite}
+  .together.seen .card.later i::after{animation:fill2 6s ease-in-out infinite}
+  /* the toestellen and the extra features arrive one after the other when you scroll to them */
+  .reveal > *{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+  .reveal.seen > *{opacity:1;transform:none}
+  .reveal.seen > :nth-child(2){transition-delay:.12s}.reveal.seen > :nth-child(3){transition-delay:.24s}.reveal.seen > :nth-child(4){transition-delay:.36s}
+  .device:hover .icon{animation:nudge .5s ease}
+  .tour .steps button[aria-pressed=true] + .timer{animation:timer 5s linear forwards}
+  .tour.stopped .steps .timer{animation:none!important;width:0}
+}
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes fromRight{from{opacity:0;transform:translateX(60px) rotate(1.5deg)}to{opacity:1;transform:none}}
+@keyframes fromBelow{from{opacity:0;transform:translateY(60px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:none}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(255,211,77,0)}50%{box-shadow:0 0 0 10px rgba(255,211,77,.18)}}
+@keyframes fill{0%{width:0}35%,100%{width:38%}}
+@keyframes run{0%,35%{top:72px;opacity:0}40%{opacity:1}62%{top:calc(100% - 72px);opacity:1}68%,100%{top:calc(100% - 72px);opacity:0}}
+@keyframes light{0%,60%{border-color:var(--line-dark);box-shadow:none}68%,92%{border-color:rgba(255,211,77,.7);box-shadow:0 0 0 4px rgba(255,211,77,.12)}100%{border-color:var(--line-dark);box-shadow:none}}
+@keyframes fill2{0%,62%{width:0}75%,100%{width:38%}}
+@keyframes nudge{0%,100%{transform:none}30%{transform:translateY(-5px) rotate(-6deg)}60%{transform:translateY(0) rotate(4deg)}}
+@keyframes timer{from{width:0}to{width:100%}}
 
 /* ---- choose your screen */
 .devices{padding:110px 0 90px}
@@ -118,6 +117,7 @@ p{margin:0}
 .card.later{margin-left:12%}
 .card.later i::after{background:var(--violet-soft)}
 .handoff .link{position:absolute;left:47px;top:72px;bottom:72px;border-left:2px dashed rgba(255,211,77,.5)}
+.handoff .runner{position:absolute;left:48px;top:72px;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--sun);box-shadow:0 0 0 6px rgba(255,211,77,.18),0 0 20px rgba(255,211,77,.7);opacity:0}
 
 /* ---- tour */
 .tour{padding:110px 0}
@@ -130,6 +130,10 @@ p{margin:0}
 .tour .steps span{display:block;color:var(--muted);font-size:16px;margin-top:4px}
 .tour .steps button[aria-pressed=true] b{color:var(--violet)}
 .tour .steps button[aria-pressed=true] b::after{background:var(--sun);border-color:var(--sun)}
+.tour .steps li{position:relative}
+.tour .steps .timer{position:absolute;left:0;bottom:-1px;height:2px;width:0;background:var(--violet)}
+.stage img{transition:opacity .35s ease}
+.stage img.fade{opacity:0}
 .tour .steps button:focus-visible{outline:3px solid var(--violet);outline-offset:4px}
 .stage{position:sticky;top:30px}
 .stage .panel{background:#05040f;border-radius:16px;padding:10px;box-shadow:0 30px 60px rgba(22,19,58,.25)}
@@ -163,18 +167,9 @@ p{margin:0}
 .faq .help{margin-top:26px;color:var(--muted)}
 .faq .help a{color:var(--violet);font-weight:700}
 
-footer{background:var(--night);color:var(--mist);padding:44px 0;font-size:15px}
-footer .wrap{display:flex;flex-wrap:wrap;gap:16px 30px;align-items:center}
-footer .brand{font-size:22px}
-footer .brand svg{width:30px;height:30px}
-footer nav{display:flex;flex-wrap:wrap;gap:22px;margin-left:auto}
-footer a{color:#fff;text-decoration:none}
-footer a:hover{text-decoration:underline}
-footer .small{width:100%;font-size:13px}
 
 /* ---- smaller screens */
 @media (max-width:980px){
-  .nav{display:none}
   .hero{padding:120px 0 80px}
   .hero .wrap,.together .wrap,.tour .wrap,.faq .wrap{grid-template-columns:1fr;gap:46px}
   .devices .intro{flex-direction:column;align-items:start}
@@ -198,15 +193,15 @@ footer .small{width:100%;font-size:13px}
 <body>
 <header class="bar">
   <div class="wrap">
-    <a class="brand" href="#top" aria-label="Zono">
+    <a class="brand" href="/" aria-label="Zono">
       <svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="64" y="64" width="896" height="896" rx="245" fill="#5350f6"/><path d="M304 340H715V438L449 697H718V798H301V696L568 438H304Z" fill="#fff"/><circle cx="749" cy="770" r="49" fill="#ffd365"/></svg>
       zono <small>tv</small>
     </a>
     <nav class="nav" aria-label="Menu">
-      <a href="#toestellen" data-t="navDevices"></a>
-      <a href="#samen" data-t="navTogether"></a>
-      <a href="#rondleiding" data-t="navTour"></a>
-      <a href="#vragen" data-t="navFaq"></a>
+      <a href="/#toestellen" data-s="navDevices"></a>
+      <a href="/#samen" data-s="navTogether"></a>
+      <a href="/#rondleiding" data-s="navTour"></a>
+      <a href="/#vragen" data-s="navFaq"></a>
     </nav>
     <div class="langs">
       <button type="button" id="lang-toggle" aria-haspopup="true" aria-expanded="false"></button>
@@ -238,7 +233,7 @@ footer .small{width:100%;font-size:13px}
         <p class="note" data-t="playerOnly"></p>
       </div>
       <div class="screens" id="screens" aria-hidden="true">
-        <div class="tv"><div class="panel"><img id="tv-shot" alt="" width="1600" height="900"></div><div class="foot"></div></div>
+        <div class="tv"><div class="panel"><img id="tv-shot" alt="" width="1600" height="900"><img id="tv-next" class="next" alt="" width="1600" height="900"></div><div class="foot"></div></div>
         <div class="laptop"><div class="lid"><img id="pc-shot" alt="" width="1672" height="941"></div><div class="base"></div></div>
         <svg class="trail" viewBox="0 0 560 475">
           <defs><radialGradient id="glow"><stop offset="0" stop-color="#ffd34d" stop-opacity=".7"/><stop offset="1" stop-color="#ffd34d" stop-opacity="0"/></radialGradient></defs>
@@ -256,7 +251,7 @@ footer .small{width:100%;font-size:13px}
   <section class="devices" id="toestellen">
     <div class="wrap">
       <div class="intro"><h2 data-t="devicesTitle"></h2><p data-t="devicesLead"></p></div>
-      <div class="row">
+      <div class="row reveal">
         <div class="device">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M1.5 19.5h21"/></svg>
           <h3>Windows</h3>
@@ -295,6 +290,7 @@ footer .small{width:100%;font-size:13px}
       </div>
       <div class="handoff" aria-hidden="true">
         <div class="link"></div>
+        <div class="runner"></div>
         <div class="card"><div class="where"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M1.5 19.5h21"/></svg></div>
           <div><b>De Haven · S2 E4</b><span data-t="cardPc"></span><i></i></div></div>
         <div class="card later"><div class="where"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/></svg></div>
@@ -312,7 +308,7 @@ footer .small{width:100%;font-size:13px}
       <div class="stage"><div class="panel"><img id="stage" alt="" width="1600" height="900"></div><div class="foot"></div></div>
     </div>
     <div class="wrap extra">
-      <div class="more" id="more"></div>
+      <div class="more reveal" id="more"></div>
     </div>
   </section>
 
@@ -332,19 +328,20 @@ footer .small{width:100%;font-size:13px}
   </section>
 </main>
 
-<footer>
+<footer class="site">
   <div class="wrap">
-    <a class="brand" href="#top" aria-label="Zono"><svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="64" y="64" width="896" height="896" rx="245" fill="#5350f6"/><path d="M304 340H715V438L449 697H718V798H301V696L568 438H304Z" fill="#fff"/><circle cx="749" cy="770" r="49" fill="#ffd365"/></svg>zono</a>
+    <a class="brand" href="/" aria-label="Zono"><svg viewBox="0 0 1024 1024" aria-hidden="true"><rect x="64" y="64" width="896" height="896" rx="245" fill="#5350f6"/><path d="M304 340H715V438L449 697H718V798H301V696L568 438H304Z" fill="#fff"/><circle cx="749" cy="770" r="49" fill="#ffd365"/></svg>zono</a>
     <nav aria-label="Footer">
-      <a href="apps/" data-t="footTv"></a>
-      <a href="privacy.html" id="privacy" data-t="footPrivacy"></a>
+      <a href="/apps/" data-keep-lang="/apps/" data-s="footTv"></a>
+      <a href="/privacy.html" data-keep-lang="/privacy.html" data-s="footPrivacy"></a>
       <a href="https://github.com/scoutr2019/zono" target="_blank" rel="noopener">GitHub</a>
       <a href="mailto:support@zono.be">support@zono.be</a>
     </nav>
-    <p class="small" data-t="footSmall"></p>
+    <p class="small" data-s="footSmall"></p>
   </div>
 </footer>
 
+<script src="/site.js"></script>
 <script>
 /* Texts in four languages. Versions and downloads come from GitHub, so a new Zono needs no change here. */
 var ICONS = {
@@ -354,45 +351,44 @@ var ICONS = {
   fast: '<path d="M13 2.5 4.5 13.5H12l-1 8 8.5-11H12z"/>'
 };
 var T = {
-nl: { navDevices: "Toestellen", navTogether: "Samen kijken", navTour: "Rondleiding", navFaq: "Vragen",
-  h1a: "Eén Zono.", h1b: "Elk scherm.",
-  lead: "Speel je eigen IPTV-abonnement af op je pc, je LG en je Android TV. Begin een film op het ene scherm en kijk verder op het andere.",
-  getWindows: "Download voor Windows", getTv: "Zet Zono op je tv",
-  playerOnly: "<b>Alleen de player.</b> Zono levert geen zenders of films: je gebruikt je eigen abonnement of afspeellijst.",
-  chipPc: "34 min gekeken op je pc", chipTv: "verder op je tv",
-  devicesTitle: "Kies je scherm", devicesLead: "Dezelfde Zono op elk toestel, met dezelfde knoppen en dezelfde gids. Wat je op het ene doet, weet het andere.",
-  winText: "Voor Windows 10 en 11. Installeren zonder beheerdersrechten; nieuwe versies komen vanzelf.",
-  lgText: "Voor LG-tv's vanaf 2018 (webOS). Je installeert hem eenmalig met je pc en een gratis LG-account.",
-  androidText: "Voor Google TV en Android TV: TCL, Sony, Philips, Android-boxen en Fire TV. Typ <code>zono.be/apk</code> in de app Downloader.",
-  download: "Downloaden", howTo: "Zo installeer je hem", version: "Versie {0} · {1}",
-  togetherTitle: "Begin hier, kijk daar verder.",
-  togetherLead: "Zet de film op pauze op je pc en zet je tv aan: hij staat klaar bij Verder kijken, op dezelfde seconde. Ook andersom.",
-  t1: "<b>Verder kijken gaat mee</b> tussen Windows, LG en Android TV. Wat je uitkeek, verdwijnt overal.",
-  t2: "<b>Je favorieten en je laatste zender</b> ook, per profiel.",
-  t3: "<b>Versleuteld op je eigen toestel.</b> zono.be bewaart alleen een slot dat het zelf niet kan openen, en ziet nooit wat je kijkt.",
-  cardPc: "gepauzeerd op je pc, 21:40", cardTv: "klaar op je tv · verder vanaf 21:40",
-  tourTitle: "Gemaakt voor de bank.",
-  tour: [["discover", "Ontdekken", "Top 10, nieuwe films en series, en je eigen landen eerst."],
-    ["live", "Live tv", "Zenders per groep, met wat er nu en straks speelt in een klein beeld."],
-    ["guide", "Tv-gids", "Blader door de gids terwijl je zender rechtsboven blijft spelen."],
-    ["film", "Films en series", "Alles over een titel, verder kijken waar je was, en ondertitels."],
-    ["fullscreen", "Volledig scherm", "Zappen met de pijltjes of zendernummers, met een balk die vertelt wat er speelt."]],
-  more: [["phone", "Inloggen met je gsm", "Scan de QR-code op je tv en typ je gegevens op je gsm, niet met de afstandsbediening."],
-    ["users", "Profielen", "Iedereen zijn eigen lijst, met pincode en een kinderprofiel."],
-    ["subs", "Ondertitels", "Zoeken via OpenSubtitles, in je eigen taal."],
-    ["fast", "Snel, ook met grote bibliotheken", "Tienduizenden zenders en films: je zenders staan meteen klaar."]],
-  newsTitle: "Wat is er nieuw", newsMore: "Alle versies op GitHub", latest: "Nieuwste", locale: "nl-BE", forWin: "Windows", forTv: "LG en Android TV", forAll: "Alle apps",
-  faqTitle: "Vragen", faqHelp: "Nog iets? Mail <a href=\"mailto:support@zono.be\">support@zono.be</a> met je toestel, je Zono-versie en wat er gebeurt.",
-  faq: [["Windows waarschuwt bij het installeren", "Pak Zono-Setup.zip uit en start Zono-Setup.exe. Toont Windows een blauw venster, klik dan op Meer info en daarna op Toch uitvoeren. Dat gebeurt bij nieuwe programma's die Windows nog niet kent."],
-    ["Wat is Zono?", "Een player voor je eigen IPTV-abonnement of afspeellijst, op Windows, LG-tv's en Android TV."],
-    ["Levert Zono zenders of films?", "Nee. Zono levert geen streams, zenders, films of abonnementen. Je voegt zelf je eigen bron toe; wat je kunt kijken, regel je met je provider."],
-    ["Op welke toestellen werkt Zono?", "Windows 10 en 11, LG-tv's vanaf 2018 (webOS), Google TV en Android TV (zoals TCL, Sony en Philips), Android-boxen en Fire TV. Samsung nog niet."],
-    ["Hoe kijk ik verder op een ander toestel?", "Log op beide toestellen in met hetzelfde abonnement: Zono koppelt ze vanzelf. Deel je je abonnement, of gebruik je een afspeellijst? Gebruik dan een koppelcode, bij Instellingen › Je andere toestellen."],
-    ["Kan zono.be zien wat ik kijk?", "Nee. Wat tussen je toestellen meegaat, wordt op je toestel versleuteld met een sleutel die zono.be nooit krijgt. Meer in de privacyverklaring."],
-    ["Een zender speelt niet af. Wat nu?", "Controleer je internet en of je abonnement nog loopt. Gaat het om één zender, vraag het dan aan je provider. Is het een probleem met Zono, gebruik dan Probleem melden in de app."]],
-  footTv: "Zono op je tv", footPrivacy: "Privacy", footSmall: "© 2026 Zono TV · Zono is alleen de player: geen streams of zenders inbegrepen."
+nl: {
+  h1a: "Eén Zono.", h1b: "Op elk scherm.",
+  lead: "Kijk je eigen IPTV-abonnement op je pc, je LG-tv en je Android TV. Begin op het ene scherm. Kijk verder op het andere.",
+  getWindows: "Download voor Windows", getTv: "Ook voor je tv",
+  playerOnly: "<b>Zono is alleen de app.</b> Je kijkt met je eigen abonnement. Zono levert zelf geen zenders of films.",
+  chipPc: "34 minuten gekeken op je pc", chipTv: "kijk verder op je tv",
+  devicesTitle: "Kies je toestel", devicesLead: "Zono werkt overal op dezelfde manier. En je toestellen weten van elkaar waar je was.",
+  winText: "Voor Windows 10 en 11. Snel geïnstalleerd. Nieuwe versies komen vanzelf.",
+  lgText: "Voor LG-tv's vanaf 2018. Je zet de app één keer op je tv, met de hulp van je pc.",
+  androidText: "Voor tv's met Google TV of Android TV, zoals TCL, Sony en Philips. Ook voor Android-boxen en Fire TV. Typ <code>zono.be/apk</code> in de app Downloader.",
+  download: "Downloaden", howTo: "Hoe installeren?", version: "Versie {0} · {1}",
+  togetherTitle: "Stop op je pc. Kijk verder op je tv.",
+  togetherLead: "Zet je film op pauze op je pc. Zet daarna je tv aan. De film staat klaar bij Verder kijken, op precies dezelfde plek. Dat werkt ook omgekeerd.",
+  t1: "<b>Verder kijken</b> werkt op Windows, LG en Android TV. Heb je iets uitgekeken? Dan verdwijnt het overal uit de lijst.",
+  t2: "<b>Je favorieten en je laatste zender</b> gaan ook mee. Elk profiel apart.",
+  t3: "<b>Veilig.</b> Alles gaat op slot op je eigen toestel. Wij kunnen niet zien wat je kijkt.",
+  cardPc: "gepauzeerd op je pc om 21:40", cardTv: "klaar op je tv, verder vanaf 21:40",
+  tourTitle: "Gemaakt voor in de zetel.",
+  tour: [["discover", "Ontdekken", "De top 10 en nieuwe films en series. Zenders uit je eigen land eerst."],
+    ["live", "Live tv", "Je zenders per groep. In een klein beeld zie je wat er nu speelt."],
+    ["guide", "Tv-gids", "Kijk in de gids. Je zender speelt rechtsboven gewoon verder."],
+    ["film", "Films en series", "Alle info over een film of serie. Kijk verder waar je was, met ondertitels."],
+    ["fullscreen", "Volledig scherm", "Zap met de pijltjes of met het nummer van de zender. Onderaan zie je wat er speelt."]],
+  more: [["phone", "Inloggen met je gsm", "Scan de QR-code op je tv. Typ je gegevens op je gsm, niet met de afstandsbediening."],
+    ["users", "Profielen", "Iedereen zijn eigen lijst. Met pincode en een profiel voor kinderen."],
+    ["subs", "Ondertitels", "Zoek ondertitels in je eigen taal."],
+    ["fast", "Snel", "Ook met heel veel zenders en films. Je zenders staan meteen klaar."]],
+  newsTitle: "Nieuw in Zono", newsMore: "Alle versies op GitHub", latest: "Nieuwste", locale: "nl-BE", forWin: "Windows", forTv: "LG en Android TV", forAll: "Alle apps",
+  faqTitle: "Vragen", faqHelp: "Nog een vraag? Mail naar <a href=\"mailto:support@zono.be\">support@zono.be</a>. Zeg welk toestel je hebt, welke versie van Zono, en wat er gebeurt.",
+  faq: [["Windows geeft een waarschuwing bij het installeren", "Dat is normaal bij nieuwe programma's. Pak eerst Zono-Setup.zip uit en start Zono-Setup.exe. Zie je een blauw venster? Klik op Meer info en daarna op Toch uitvoeren."],
+    ["Wat is Zono?", "Een app om je eigen IPTV-abonnement te kijken. Op je pc, je LG-tv en je Android TV."],
+    ["Krijg ik zenders of films bij Zono?", "Nee. Zono is alleen de app. Je zenders en films komen van je eigen abonnement."],
+    ["Op welke toestellen werkt Zono?", "Op pc's met Windows 10 of 11. Op LG-tv's vanaf 2018. Op tv's met Google TV of Android TV, zoals TCL, Sony en Philips. En op Android-boxen en Fire TV. Op Samsung nog niet."],
+    ["Hoe kijk ik verder op een ander toestel?", "Log op beide toestellen in met hetzelfde abonnement. Zono doet de rest. Deel je je abonnement met iemand anders? Gebruik dan een koppelcode. Die vind je bij Instellingen › Je andere toestellen."],
+    ["Kan zono.be zien wat ik kijk?", "Nee. Alles gaat op slot op je eigen toestel, en wij hebben de sleutel niet. Lees meer in de privacyverklaring."],
+    ["Een zender speelt niet af. Wat nu?", "Kijk of je internet werkt en of je abonnement nog loopt. Werkt één zender niet? Vraag het aan je provider. Denk je dat het aan Zono ligt? Kies Probleem melden in de app."]]
 },
-fr: { navDevices: "Appareils", navTogether: "Regarder partout", navTour: "Visite", navFaq: "Questions",
+fr: {
   h1a: "Un seul Zono.", h1b: "Tous vos écrans.",
   lead: "Regardez votre propre abonnement IPTV sur votre PC, votre télé LG et votre Android TV. Commencez un film sur un écran, reprenez-le sur un autre.",
   getWindows: "Télécharger pour Windows", getTv: "Installer Zono sur la télé",
@@ -428,9 +424,8 @@ fr: { navDevices: "Appareils", navTogether: "Regarder partout", navTour: "Visite
     ["Comment reprendre sur un autre appareil ?", "Connectez-vous avec le même abonnement sur les deux appareils : Zono les associe tout seul. Abonnement partagé ou playlist ? Utilisez un code, dans Paramètres › Vos autres appareils."],
     ["zono.be peut-il voir ce que je regarde ?", "Non. Ce qui passe entre vos appareils est chiffré sur l'appareil, avec une clé que zono.be ne reçoit jamais. Plus d'infos dans la politique de confidentialité."],
     ["Une chaîne ne fonctionne pas. Que faire ?", "Vérifiez votre connexion et votre abonnement. S'il s'agit d'une seule chaîne, contactez votre fournisseur. Pour un problème avec Zono, utilisez Signaler un problème dans l'application."]],
-  footTv: "Zono sur la télé", footPrivacy: "Confidentialité", footSmall: "© 2026 Zono TV · Zono est uniquement le lecteur : aucun flux ni chaîne inclus."
 },
-en: { navDevices: "Devices", navTogether: "Watch anywhere", navTour: "Tour", navFaq: "Questions",
+en: {
   h1a: "One Zono.", h1b: "Every screen.",
   lead: "Play your own IPTV subscription on your PC, your LG TV and your Android TV. Start a film on one screen and carry on on another.",
   getWindows: "Download for Windows", getTv: "Put Zono on your TV",
@@ -466,9 +461,8 @@ en: { navDevices: "Devices", navTogether: "Watch anywhere", navTour: "Tour", nav
     ["How do I continue on another device?", "Sign in with the same subscription on both: Zono links them by itself. Sharing your subscription, or using a playlist? Use a link code, under Settings › Your other devices."],
     ["Can zono.be see what I watch?", "No. What goes between your devices is encrypted on the device, with a key zono.be never gets. More in the privacy statement."],
     ["A channel won't play. What now?", "Check your internet and whether your subscription is still running. If it's one channel, ask your provider. For a problem with Zono, use Report a problem in the app."]],
-  footTv: "Zono on your TV", footPrivacy: "Privacy", footSmall: "© 2026 Zono TV · Zono is just the player: no streams or channels included."
 },
-de: { navDevices: "Geräte", navTogether: "Überall schauen", navTour: "Rundgang", navFaq: "Fragen",
+de: {
   h1a: "Ein Zono.", h1b: "Jeder Bildschirm.",
   lead: "Spiel dein eigenes IPTV-Abo auf deinem PC, deinem LG-Fernseher und deinem Android TV ab. Fang einen Film auf einem Bildschirm an und schau auf dem anderen weiter.",
   getWindows: "Für Windows herunterladen", getTv: "Zono auf den Fernseher",
@@ -504,9 +498,7 @@ de: { navDevices: "Geräte", navTogether: "Überall schauen", navTour: "Rundgang
     ["Wie schaue ich auf einem anderen Gerät weiter?", "Melde dich auf beiden Geräten mit demselben Abo an: Zono verbindet sie von selbst. Geteiltes Abo oder Playlist? Nimm einen Verbindungscode, unter Einstellungen › Deine anderen Geräte."],
     ["Kann zono.be sehen, was ich schaue?", "Nein. Was zwischen deinen Geräten mitgeht, wird auf dem Gerät verschlüsselt, mit einem Schlüssel, den zono.be nie bekommt. Mehr in der Datenschutzerklärung."],
     ["Ein Sender läuft nicht. Was nun?", "Prüfe dein Internet und ob dein Abo noch läuft. Bei einem einzelnen Sender frag deinen Anbieter. Bei einem Problem mit Zono nutze Problem melden in der App."]],
-  footTv: "Zono auf dem Fernseher", footPrivacy: "Datenschutz", footSmall: "© 2026 Zono TV · Zono ist nur der Player: keine Streams oder Sender enthalten."
 }};
-var NAMES = { nl: "Nederlands", fr: "Français", en: "English", de: "Deutsch" };
 var TITLES = { nl: "Zono · je eigen tv, op elk scherm", fr: "Zono · votre télé, sur tous vos écrans", en: "Zono · your own TV, on every screen", de: "Zono · dein eigenes Fernsehen, auf jedem Bildschirm" };
 var PICS = "https://raw.githubusercontent.com/scoutr2019/zono/main/tv/screens/";
 var lang = "nl", shot = 0, windows = null, tv = null, releases = [];
@@ -519,16 +511,13 @@ function render() {
   document.documentElement.lang = lang;
   document.title = TITLES[lang];
   document.querySelectorAll("[data-t]").forEach(function (el) { el.innerHTML = t[el.getAttribute("data-t")]; });
-  document.getElementById("lang-toggle").textContent = NAMES[lang];
-  document.querySelectorAll("[data-lang]").forEach(function (b) { b.setAttribute("aria-current", String(b.getAttribute("data-lang") === lang)); });
   document.getElementById("pc-shot").src = "img/zono-collection-" + (lang === "nl" ? "v2" : lang) + ".webp";
   document.getElementById("tv-shot").src = PICS + lang + "/discover.jpg";
-  document.getElementById("privacy").href = "privacy.html?lang=" + lang;
   document.getElementById("steps").innerHTML = t.tour.map(function (s, i) {
-    return '<li><button type="button" data-shot="' + i + '" aria-pressed="' + (i === shot) + '"><b>' + s[1] + "</b><span>" + s[2] + "</span></button></li>";
+    return '<li><button type="button" data-shot="' + i + '" aria-pressed="' + (i === shot) + '"><b>' + s[1] + "</b><span>" + s[2] + '</span></button><i class="timer"></i></li>';
   }).join("");
   document.querySelectorAll("[data-shot]").forEach(function (b) {
-    b.onclick = function () { shot = +b.getAttribute("data-shot"); showShot(); };
+    b.onclick = function () { shot = +b.getAttribute("data-shot"); stopTour(); showShot(); };
   });
   document.getElementById("more").innerHTML = t.more.map(function (m) { return "<div>" + icon(m[0]) + "<p><b>" + m[1] + "</b><span>" + m[2] + "</span></p></div>"; }).join("");
   document.getElementById("faq").innerHTML = t.faq.map(function (q) { return "<details><summary>" + q[0] + "</summary><p>" + q[1] + "</p></details>"; }).join("");
@@ -536,9 +525,24 @@ function render() {
   showShot(); versions(); news();
 }
 function showShot() {
-  var s = T[lang].tour[shot], img = document.getElementById("stage");
-  img.src = PICS + lang + "/" + s[0] + ".jpg"; img.alt = "Zono: " + s[1];
-  document.querySelectorAll("[data-shot]").forEach(function (b) { b.setAttribute("aria-pressed", String(+b.getAttribute("data-shot") === shot)); });
+  var s = T[lang].tour[shot], img = document.getElementById("stage"), url = PICS + lang + "/" + s[0] + ".jpg";
+  document.querySelectorAll("[data-shot]").forEach(function (b) {
+    var on = +b.getAttribute("data-shot") === shot;
+    b.setAttribute("aria-pressed", String(on));
+    var timer = b.nextElementSibling; if (timer) { timer.style.animation = "none"; void timer.offsetWidth; timer.style.animation = ""; }
+  });
+  if (img.getAttribute("src") === url) return;
+  img.classList.add("fade");
+  var next = new Image();
+  next.onload = next.onerror = function () { img.src = url; img.alt = "Zono: " + s[1]; img.classList.remove("fade"); };
+  next.src = url;
+}
+/* the tour plays by itself (5 s per screen) until you pick one */
+var tourTimer = null, tourStopped = false;
+function stopTour() { tourStopped = true; clearInterval(tourTimer); document.querySelector(".tour").classList.add("stopped"); }
+function startTour() {
+  if (tourStopped || tourTimer || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+  tourTimer = setInterval(function () { shot = (shot + 1) % T[lang].tour.length; showShot(); }, 5000);
 }
 function versions() {
   var t = T[lang];
@@ -585,26 +589,8 @@ function news() {
   });
   document.getElementById("nieuw").hidden = !list.children.length;
 }
-function pickLanguage(next) {
-  lang = T[next] ? next : "nl";
-  try { localStorage.setItem("zono-language", lang); } catch (e) {}
-  try { var u = new URL(location.href); u.searchParams.set("lang", lang); history.replaceState(null, "", u); } catch (e) {}
-  render();
-}
-
 (function () {
-  var toggle = document.getElementById("lang-toggle"), menu = document.getElementById("lang-menu");
-  function close() { menu.hidden = true; toggle.setAttribute("aria-expanded", "false"); }
-  toggle.onclick = function () { menu.hidden = !menu.hidden; toggle.setAttribute("aria-expanded", String(!menu.hidden)); };
-  document.querySelectorAll("[data-lang]").forEach(function (b) { b.onclick = function () { pickLanguage(b.getAttribute("data-lang")); close(); toggle.focus(); }; });
-  document.addEventListener("click", function (e) { if (!e.target.closest(".langs")) close(); });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
-
-  var pick = new URLSearchParams(location.search).get("lang");
-  try { pick = pick || localStorage.getItem("zono-language"); } catch (e) {}
-  if (!T[pick]) { var b = (navigator.language || "nl").slice(0, 2); pick = T[b] ? b : "nl"; }
-  lang = pick;
-  render();
+  Site.start(function (next) { lang = T[next] ? next : "nl"; render(); });
   // the yellow dot travels once, when the screens are in view
   var screens = document.getElementById("screens");
   if ("IntersectionObserver" in window) {
@@ -613,8 +599,32 @@ function pickLanguage(next) {
   function play() {
     screens.classList.add("play");
     var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches, move = document.getElementById("move");
-    if (!still && move && move.beginElement) setTimeout(function () { move.beginElement(); }, 800);
+    if (!still && move && move.beginElement) setTimeout(function () { move.beginElement(); }, 1300);
+    if (!still) setTimeout(function () { document.querySelector(".chip.to").classList.add("go"); cycleTv(); }, 3600);
   }
+  /* after the dot arrived, the tv shows a few more Zono screens, one after the other */
+  function cycleTv() {
+    var names = ["discover", "live", "guide", "fullscreen"], at = 0, front = document.getElementById("tv-next");
+    setInterval(function () {
+      if (document.hidden) return;
+      at = (at + 1) % names.length;
+      var url = PICS + lang + "/" + names[at] + ".jpg", pre = new Image();
+      pre.onload = function () {
+        if (front.classList.contains("on")) { document.getElementById("tv-shot").src = url; front.classList.remove("on"); }
+        else { front.src = url; front.classList.add("on"); }
+      };
+      pre.src = url;
+    }, 3800);
+  }
+  // sections that move when you scroll to them
+  var watch = function (el, then) {
+    if (!el) return;
+    if (!("IntersectionObserver" in window)) { el.classList.add("seen"); if (then) then(); return; }
+    new IntersectionObserver(function (seen, obs) { if (seen[0].isIntersecting) { el.classList.add("seen"); if (then) then(); obs.disconnect(); } }, { threshold: .25 }).observe(el);
+  };
+  document.querySelectorAll(".reveal").forEach(function (el) { watch(el); });
+  watch(document.querySelector(".together"));
+  watch(document.querySelector(".tour"), startTour);
 
   // the newest release WITH the Windows file (TV-only releases have none), and the TV version
   fetch("https://api.github.com/repos/scoutr2019/zono/releases?per_page=20", { headers: { Accept: "application/vnd.github+json" } })
