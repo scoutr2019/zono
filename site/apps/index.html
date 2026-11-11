@@ -53,6 +53,15 @@ kbd{font:800 13px/1 system-ui,sans-serif;border:1px solid var(--line);border-bot
 .note{border-left:4px solid var(--yellow)}
 .or{display:flex;align-items:center;gap:12px;color:var(--muted);font-weight:700;margin:18px 0}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+/* what it looks like */
+.look h2{margin-bottom:2px}
+.tv{margin:18px auto 0;max-width:860px}
+.tv .frame{background:#0b0b12;border-radius:18px;padding:10px;box-shadow:0 30px 60px rgba(20,14,70,.28)}
+.tv img{display:block;width:100%;aspect-ratio:16/9;border-radius:10px;background:#15131f;object-fit:cover}
+.tv .stand{width:28%;height:12px;margin:0 auto;background:linear-gradient(#2a2838,#14131c);border-radius:0 0 12px 12px}
+.shots{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+.shots button{font:inherit;font-weight:700;font-size:14px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:7px 14px}
+.shots button[aria-pressed=true]{background:var(--violet);border-color:var(--violet);color:#fff}
 details{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px 20px;margin-bottom:10px}
 summary{cursor:pointer;font-weight:800}
 details p{margin:8px 0 2px}
@@ -87,6 +96,12 @@ footer{text-align:center;color:var(--muted);font-size:14px;padding:0 16px 40px}
     <a class="button" id="get" href="https://github.com/scoutr2019/zono/raw/main/tv/Zono-TV.apk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="get-label"></span></a>
   </div>
 
+  <div class="card look">
+    <h2 data-t="lookTitle"></h2><p class="muted" data-t="lookSub" style="margin:0"></p>
+    <div class="tv"><div class="frame"><img id="shot" alt="" width="1600" height="900"></div><div class="stand"></div></div>
+    <div class="shots" id="shots"></div>
+  </div>
+
   <section id="steps"></section>
 
   <div class="part"><h2 data-t="faqTitle"></h2></div>
@@ -101,6 +116,7 @@ var GH = "https://github.com/scoutr2019/zono/raw/main/tv/";
 var T = {
 nl: {
   title: "Zono op je tv",
+  lookTitle: "Zo ziet het eruit", lookSub: "Op LG en Android TV is het dezelfde app.", shots: ["Ontdekken", "Filmpagina", "Live TV", "Volledig scherm", "Tv-gids"],
   lead: "Dezelfde Zono, nu ook op je grote scherm. Kies je tv en volg de stappen. Een paar minuten werk, daarna log je in met je gsm.",
   androidSub: "Google TV, Android TV, Android-box, Nvidia Shield, Fire TV",
   lgSub: "LG smart-tv van 2018 of nieuwer, met een pc",
@@ -148,6 +164,7 @@ nl: {
 },
 fr: {
   title: "Zono sur votre télé",
+  lookTitle: "Voici à quoi ça ressemble", lookSub: "La même application sur LG et Android TV.", shots: ["Découvrir", "Page du film", "TV en direct", "Plein écran", "Guide TV"],
   lead: "Le même Zono, maintenant sur grand écran. Choisissez votre télé et suivez les étapes. Quelques minutes suffisent, puis vous vous connectez avec votre téléphone.",
   androidSub: "Google TV, Android TV, box Android, Nvidia Shield, Fire TV",
   lgSub: "Smart TV LG de 2018 ou plus récente, avec un PC",
@@ -195,6 +212,7 @@ fr: {
 },
 en: {
   title: "Zono on your TV",
+  lookTitle: "What it looks like", lookSub: "The same app on LG and Android TV.", shots: ["Discover", "Film page", "Live TV", "Full screen", "TV guide"],
   lead: "The same Zono, now on your big screen. Pick your TV and follow the steps. It takes a few minutes, then you sign in with your phone.",
   androidSub: "Google TV, Android TV, Android box, Nvidia Shield, Fire TV",
   lgSub: "LG smart TV from 2018 or newer, with a PC",
@@ -242,6 +260,7 @@ en: {
 },
 de: {
   title: "Zono auf deinem Fernseher",
+  lookTitle: "So sieht es aus", lookSub: "Dieselbe App auf LG und Android TV.", shots: ["Entdecken", "Filmseite", "Live-TV", "Vollbild", "TV-Programm"],
   lead: "Dasselbe Zono, jetzt auf dem großen Bildschirm. Wähle deinen Fernseher und folge den Schritten. Ein paar Minuten, dann meldest du dich mit dem Handy an.",
   androidSub: "Google TV, Android TV, Android-Box, Nvidia Shield, Fire TV",
   lgSub: "LG Smart-TV ab 2018, mit einem PC",
@@ -287,6 +306,15 @@ de: {
   ],
   playerOnly: "Zono ist nur der Player. Es sind keine Streams oder Sender enthalten: Du nutzt dein eigenes Abo."
 }};
+var SHOTS = ["discover", "film", "live", "fullscreen", "guide"], shot = 0;
+var PICS = "https://raw.githubusercontent.com/scoutr2019/zono/main/tv/screens/";
+function showShot() {
+  var img = document.getElementById("shot");
+  img.src = PICS + lang + "/" + SHOTS[shot] + ".jpg";
+  img.alt = "Zono: " + T[lang].shots[shot];
+  document.getElementById("shots").innerHTML = T[lang].shots.map(function (c, i) { return '<button data-shot="' + i + '" aria-pressed="' + (i === shot) + '">' + c + "</button>"; }).join("");
+  document.querySelectorAll("[data-shot]").forEach(function (b) { b.onclick = function () { shot = +b.getAttribute("data-shot"); showShot(); }; });
+}
 var LOCALE = { nl: "nl-BE", fr: "fr-BE", en: "en-GB", de: "de-DE" };
 var lang = "nl", device = "android", release = null;
 
@@ -307,6 +335,7 @@ function render() {
   var html = android ? part(t.ad) + '<div class="or">' + (lang === "fr" ? "ou" : lang === "de" ? "oder" : lang === "en" ? "or" : "of") + '</div>' + part(t.au)
     : part(t.lg[0]) + part(t.lg[1]) + '<div class="card note" style="margin-top:6px">' + t.lgNote + '</div>';
   document.getElementById("steps").innerHTML = html + part(t.login);
+  showShot();
   document.getElementById("faq").innerHTML = t.faq.map(function (q) { return "<details><summary>" + q[0] + "</summary><p>" + q[1] + "</p></details>"; }).join("");
   showVersion();
 }
