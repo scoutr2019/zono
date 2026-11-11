@@ -261,7 +261,7 @@ h2 .hint { margin-left: 22px; }
 .sheet-box { width: 760px; max-height: 920px; background: #16161c; border: 2px solid #2e2e38; border-radius: 30px; padding: 44px; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
 .sheet-box.wide { width: 1000px; }
 .sheet-box h2 { font-size: 36px; margin-bottom: 14px; }
-.sheet-text { color: var(--muted); font-size: 24px; line-height: 1.45; margin-bottom: 20px; }
+.sheet-text { color: var(--muted); font-size: 24px; line-height: 1.45; margin-bottom: 20px; white-space: pre-line; }
 .sheet-box input.f { margin-bottom: 20px; }
 .sheet-list { max-height: 620px; padding: 6px; }
 .sheet-heading { color: var(--accent-soft); font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 6px 24px; }

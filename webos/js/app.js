@@ -207,6 +207,7 @@
 
   /** What this profile may see: no hidden groups; in a kids profile no adult groups or titles. */
   function buildShelves() {
+    urlKeys = null;
     var kids = !!currentProfile().kids, hidden = {};
     S.hidden.forEach(function (h) { hidden[h] = 1; });
     var anyHidden = S.hidden.length > 0;
@@ -247,6 +248,7 @@
       if (same) return true; // nothing new: no redraw while you are browsing
       if (!S.source) { S.source = source; save("source", source); stopPairing(); S.choosing = needsChoice(); }
       render();
+      syncSoon(1500);
       return true;
     }, function (problem) {
       S.loading = false; S.more = false;
@@ -285,6 +287,7 @@
           buildShelves();
           S.loading = false;
           setTimeout(render, 0);
+          syncSoon(2500);
         }, 0);
         var old = cacheOld, due = Date.now() - load("refreshedAt", 0) > 6 * 3600000;
         if (old || due) setTimeout(function () { refresh(S.source, true); }, old ? 500 : 15000);
@@ -295,12 +298,16 @@
   function saveProgress(item, pos, dur) {
     if (item.kind === "catchup") return;
     var list = S.progress.filter(function (p) { return p.item.id !== item.id; });
-    if (!(dur > 0 && pos > dur * 0.94) && pos > 60) {
+    var finished = dur > 0 && pos > dur * 0.94;
+    if (!finished && pos > 60) {
       list.unshift({ item: { id: item.id, kind: item.kind, title: item.title, image: item.image || "", url: item.url || "", sid: item.sid || "", ext: item.ext || "", group: item.group || "",
-        number: item.number || 0 }, pos: pos, dur: dur, t: Date.now() });
+        number: item.number || 0, series: item.series || "", seriesTitle: item.seriesTitle || "" }, pos: pos, dur: dur, t: Date.now(), from: DEVICE });
+    } else if (finished) {
+      var done = pload("syncDone", {}); done[Sync.itemKey(item) || item.id] = Date.now(); psave("syncDone", done); // other devices: finished
     }
     S.progress = list.slice(0, 40);
     psave("progress", S.progress);
+    syncSoon();
   }
   function progressOf(id) { for (var i = 0; i < S.progress.length; i++) if (S.progress[i].item.id === id) return S.progress[i]; return null; }
   function isFavorite(id) { return S.favorites.indexOf(id) >= 0; }
@@ -308,12 +315,122 @@
     var i = S.favorites.indexOf(item.id);
     if (i >= 0) S.favorites.splice(i, 1); else S.favorites.unshift(item.id);
     psave("favorites", S.favorites);
+    var log = pload("syncFav", {}); log[Sync.itemKey(item) || item.id] = { t: Date.now(), on: i < 0, kind: item.kind, title: item.title, image: item.image || "", sid: item.sid || "" };
+    psave("syncFav", log); syncSoon();
     toast(isFavorite(item.id) ? T("favorite_added", item.title) : T("favorite_removed", item.title));
   }
   function addRecent(id) {
     S.recent = [id].concat(S.recent.filter(function (x) { return x !== id; })).slice(0, 15);
     psave("recent", S.recent);
   }
+
+  // ---- linking with Zono on other devices (js/sync.js): continue watching, favourites, last channel
+  var DEVICE = window.ZonoAndroid ? "android" : "lg";
+  var SYNC_API = window.ZONO_SYNC_API || API + "/sync.php";
+  var syncTimer = null, syncBusy = false, syncAgain = false;
+  function syncOn() { return load("sync", true) !== false; }
+  function syncSecret() {
+    var code = load("syncCode", "");
+    return code ? Sync.linkSecret(code) : Sync.secretFor(S.source);
+  }
+  function syncProfile() { return profileId === "main" ? "main" : Sync.profileName(currentProfile().name); }
+  // a 409 ("another device was first") must give its body back: a request of our own for that
+  function syncRequest(method, url, body) {
+    return new Promise(function (resolve, reject) {
+      var x = new XMLHttpRequest();
+      x.open(method, url, true);
+      x.timeout = 20000;
+      if (body !== undefined) x.setRequestHeader("Content-Type", "text/plain;charset=UTF-8");
+      x.onload = function () { var b = {}; try { b = x.responseText ? parse(x.responseText) : {}; } catch (e) {} resolve({ status: x.status, body: b }); };
+      x.onerror = x.ontimeout = function () { reject(new Error("network")); };
+      x.send(body === undefined ? null : JSON.stringify(body));
+    });
+  }
+  function extOf(url) { var m = /\.([a-z0-9]{2,4})(?:[?#]|$)/i.exec(String(url || "")); return m ? m[1].toLowerCase() : ""; }
+  /** This device's part of the shared package (the current profile). */
+  function syncLocal() {
+    var part = { progress: {}, fav: {}, last: null };
+    var done = pload("syncDone", {});
+    Object.keys(done).forEach(function (k) { part.progress[k] = { t: done[k], done: 1 }; });
+    S.progress.forEach(function (p) {
+      var it = p.item, key = Sync.itemKey(it);
+      if (!key || it.kind === "catchup") return;
+      if (part.progress[key] && part.progress[key].t >= (p.t || 0)) return;
+      part.progress[key] = { t: p.t || 0, pos: Math.round(p.pos), dur: Math.round(p.dur || 0), from: p.from || DEVICE, kind: it.kind, title: it.title,
+        image: it.image || "", sid: it.sid || "", ext: it.ext || extOf(it.url), season: it.group || "", number: it.number || 0,
+        series: it.series || "", seriesTitle: it.seriesTitle || "" };
+    });
+    var log = pload("syncFav", {});
+    S.favorites.forEach(function (id) { var it = find(id), key = it ? Sync.itemKey(it) : id; if (key && !log[key]) part.fav[key] = { t: 0, on: true, kind: it ? it.kind : "", title: it ? it.title : "", sid: it ? it.sid || "" : "" }; });
+    Object.keys(log).forEach(function (k) { part.fav[k] = log[k]; });
+    var last = find(load(pkey("last"), ""));
+    if (last) part.last = { key: Sync.itemKey(last), t: pload("lastT", 0), title: last.title, sid: last.sid || "" };
+    var pack = Sync.empty(); pack.profiles[syncProfile()] = part;
+    return pack;
+  }
+  var urlKeys = null; // playlists: link hash -> item (made once, only when needed)
+  function findKey(key) {
+    if (key.charAt(0) !== "u") return find(key);
+    if (!urlKeys) { urlKeys = {}; S.items.forEach(function (i) { if (i.url && i.kind !== "series") urlKeys[Sync.itemKey(i)] = i; }); }
+    return urlKeys[key] || null;
+  }
+  /** Takes over what other devices did. True when something changed here. */
+  function syncApply(pack) {
+    var part = pack && pack.profiles && pack.profiles[syncProfile()];
+    if (!part) return false;
+    var changed = false, byKey = {};
+    S.progress.forEach(function (p) { byKey[Sync.itemKey(p.item) || p.item.id] = p; });
+    Object.keys(part.progress || {}).forEach(function (key) {
+      var e = part.progress[key], mine = byKey[key];
+      if (mine && (mine.t || 0) >= (e.t || 0)) return;
+      if (e.done) { if (mine) { S.progress.splice(S.progress.indexOf(mine), 1); changed = true; } return; }
+      var known = findKey(key);
+      var item = known ? { id: known.id, kind: known.kind, title: known.title, image: known.image || e.image || "", url: known.url || "", sid: known.sid || "", ext: known.ext || "", group: known.group || "", number: 0 }
+        : { id: key.charAt(0) === "u" ? key : key, kind: e.kind === "episode" ? "episode" : e.kind, title: e.title || "", image: e.image || "", sid: e.sid || "", ext: e.ext || "",
+          group: String(e.season || ""), number: e.number || 0, series: e.series || "", seriesTitle: e.seriesTitle || "",
+          url: e.kind === "episode" && e.sid && S.source && S.source.type === "xtream" ? Catalog.streamUrl(S.source, "series", e.sid, e.ext || "mp4") : "" };
+      if (!known && key.charAt(0) === "u") return; // a playlist title this device does not have
+      if (mine) S.progress.splice(S.progress.indexOf(mine), 1);
+      S.progress.unshift({ item: item, pos: e.pos || 0, dur: e.dur || 0, t: e.t || 0, from: e.from || "" });
+      changed = true;
+    });
+    if (changed) { S.progress.sort(function (a, b) { return (b.t || 0) - (a.t || 0); }); S.progress = S.progress.slice(0, 40); psave("progress", S.progress); }
+    var log = pload("syncFav", {}), favChanged = false;
+    Object.keys(part.fav || {}).forEach(function (key) {
+      var e = part.fav[key];
+      if (log[key] && (log[key].t || 0) >= (e.t || 0)) return;
+      var item = findKey(key), id = item ? item.id : key, at = S.favorites.indexOf(id);
+      if (e.on && at < 0) { S.favorites.unshift(id); favChanged = true; }
+      if (!e.on && at >= 0) { S.favorites.splice(at, 1); favChanged = true; }
+      log[key] = e;
+    });
+    psave("syncFav", log);
+    if (favChanged) { psave("favorites", S.favorites); changed = true; }
+    if (part.last && (part.last.t || 0) > pload("lastT", 0)) {
+      var channel = findKey(part.last.key);
+      if (channel) { save(pkey("last"), channel.id); psave("lastT", part.last.t); addRecent(channel.id); changed = true; }
+    }
+    return changed;
+  }
+  function syncNow() {
+    var secret = S.source && syncOn() ? syncSecret() : "";
+    if (!secret) return Promise.resolve(false);
+    if (syncBusy) { syncAgain = true; return Promise.resolve(false); }
+    syncBusy = true;
+    return Sync.exchange(SYNC_API, secret, syncLocal(), syncRequest).then(function (merged) {
+      var changed = syncApply(merged);
+      save("syncAt", Date.now());
+      if (changed && !playerOpen() && !sheetOpen() && S.page === "discover" && !S.loading) { var k = currentKey(); render(); restoreFocus(k); }
+      return changed;
+    }, function (problem) { log("sync: " + (problem && problem.message)); return false; }).then(function (changed) {
+      syncBusy = false;
+      if (syncAgain) { syncAgain = false; syncSoon(); }
+      return changed;
+    });
+  }
+  function syncSoon(wait) { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, wait || 6000); }
+  setInterval(function () { if (!playerOpen()) syncNow(); }, 5 * 60000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) syncSoon(1500); });
 
   // ------------------------------------------------------------------ tv guide
   var epgCache = {}; // channel id -> {at, full, rows}
@@ -753,6 +870,7 @@
     S.choosing = false; S.page = "discover"; S.series = S.detail = S.guideFor = null;
     render();
     focusFirst(".main");
+    syncSoon(800);
   }
   function profilesScreen() {
     return h("div", { cls: "who" }, [h("img", { cls: "who-logo", src: "img/logo.png", alt: "Zono" }), h("h1", { text: T("who_watching") }),
@@ -932,7 +1050,8 @@
       var items = S.progress.map(function (p) { return p.item; });
       rows.push(shelf(T("continue_watching"), S.progress.map(function (p, i) {
         var sub = p.item.kind === "episode" ? T("season", p.item.group) : "";
-        return wide(p.item, function () { play(items, i); }, { progress: p.dur ? p.pos / p.dur : 0, sub: sub });
+        var elsewhere = p.from && p.from !== DEVICE ? T(p.from === "pc" ? "from_pc" : "from_tv") : "";
+        return wide(p.item, function () { play(items, i); }, { progress: p.dur ? p.pos / p.dur : 0, sub: [sub, elsewhere].filter(Boolean).join(" · ") });
       })));
     }
     var favs = S.favorites.map(find).filter(visible);
@@ -1393,6 +1512,10 @@
         } }, { label: T("cancel"), go: closeSheet }] });
       }, { key: "logout" }));
     }
+    parts.push(h("h2", { text: T("sync_title"), style: "margin-top:44px" }));
+    parts.push(rowItem(T("sync_row"), function () { save("sync", !syncOn()); render(); if (syncOn()) syncNow(); },
+      { trail: T(syncOn() ? "on" : "off"), sub: T(load("syncCode", "") ? "sync_text_code" : "sync_text"), key: "sync" }));
+    if (syncOn()) parts.push(rowItem(T("sync_code"), syncCodeSheet, { trail: load("syncCode", "") || T("sync_auto"), key: "synccode" }));
     parts.push(h("h2", { text: T("privacy"), style: "margin-top:44px" }));
     parts.push(rowItem(T("stats"), function () { save("share", !sharing()); render(); }, { trail: T(sharing() ? "on" : "off"), sub: T("stats_text"), key: "share" }));
     parts.push(rowItem(T("report"), reportSheet, { key: "report" }));
@@ -1434,6 +1557,25 @@
       } };
     });
     sheet({ title: T("hidden_groups"), text: items.length ? T("hold_hint") : T("hidden_none"), items: items.concat([{ label: T("close"), go: closeSheet }]), onClose: render });
+  }
+  /** A link code instead of the subscription: for a shared subscription, or a playlist on Windows. */
+  function syncCodeSheet() {
+    var code = load("syncCode", ""), typed = "";
+    function use(c) { save("syncCode", c); closeSheet(); render(); syncNow().then(function () { toast(T("sync_done")); }); }
+    var items = [];
+    if (!code) items.push({ label: T("sync_code_make"), go: function () { var c = Sync.newLinkCode(); use(c); sheet({ title: T("sync_code"), text: T("sync_code_show", c), items: [{ label: "OK", go: closeSheet }] }); } });
+    items.push({ label: T("sync_code_enter"), go: function () {
+      closeSheet();
+      var field = input("", "XXXX-XXXX-XXXX-XXXX", function (v) { typed = v; }, { key: "codein" });
+      sheet({ title: T("sync_code_enter"), text: T("sync_code_enter_text"), content: [field], items: [{ label: T("save"), go: function () {
+        var clean = typed.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (clean.length !== 16) return toast(T("sync_code_wrong"));
+        use(clean.replace(/(.{4})(?=.)/g, "$1-"));
+      } }, { label: T("cancel"), go: closeSheet }] });
+    } });
+    if (code) items.push({ label: T("sync_code_remove"), go: function () { use(""); } });
+    items.push({ label: T("cancel"), go: closeSheet });
+    sheet({ title: T("sync_code"), text: code ? T("sync_code_show", code) : T("sync_code_text"), items: items });
   }
   function nameSheet(title, value, done) {
     var name = value;
@@ -1752,7 +1894,7 @@
     syncVideo();
     P.returnFocus = currentKey();
     var item = current();
-    save(pkey("last"), item.id); addRecent(item.id);
+    save(pkey("last"), item.id); psave("lastT", Date.now()); addRecent(item.id); syncSoon(30000);
     liveBar(item, epgCache[item.id] && epgCache[item.id].rows);
   }
   function current() { return P.queue[P.index]; }
@@ -1797,7 +1939,7 @@
     if (isLive()) { var seekBar = document.getElementById("bar"); seekBar.classList.remove("on"); seekBar.hidden = true; }
     else hideLiveBar();
     if (P.mini) { hideLiveBar(); hideBanner(); loadNowNext(item); }
-    else if (isLive()) { save(pkey("last"), item.id); addRecent(item.id); hideBanner(); liveBar(item, epgCache[item.id] && epgCache[item.id].rows); loadNowNext(item); }
+    else if (isLive()) { save(pkey("last"), item.id); psave("lastT", Date.now()); addRecent(item.id); syncSoon(30000); hideBanner(); liveBar(item, epgCache[item.id] && epgCache[item.id].rows); loadNowNext(item); }
     spinner(true);
     var p = video.play(); if (p && p.catch) p.catch(function () {});
     if (!isLive()) banner(item.title, info);
@@ -2096,5 +2238,5 @@
   start();
   setInterval(checkReminders, 15000);
   setTimeout(ping, 20000);
-  window.Zono = { key: pressKey, state: S, render: render, buildShelves: buildShelves, mini: mini, P: P, version: VERSION, pair: pair, checkReminders: checkReminders, ping: ping, log: LOG }; // for tests
+  window.Zono = { key: pressKey, state: S, render: render, buildShelves: buildShelves, mini: mini, P: P, version: VERSION, pair: pair, checkReminders: checkReminders, ping: ping, log: LOG, syncNow: syncNow, toggleFavorite: toggleFavorite }; // for tests
 })();
