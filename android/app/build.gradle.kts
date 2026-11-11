@@ -17,8 +17,8 @@ android {
         applicationId = "be.zono.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.7.3"
+        versionCode = 9
+        versionName = "2.3.5"
     }
     sourceSets["main"].assets.srcDir(webAssets)
     signingConfigs {
