@@ -69,6 +69,22 @@ class Updates(unittest.TestCase):
         with self.answer(release(name="notes.txt")):
             self.assertIsNone(updater.latest())
 
+    def test_tv_releases_marked_latest_are_skipped(self):
+        tv = {"tag_name": "v2.3.7", "name": "Zono TV 2.3.7", "draft": False, "prerelease": False,
+              "assets": [{"name": "Zono-TV.apk", "browser_download_url": "https://github.com/x/Zono-TV.apk"}]}
+        old = release()
+        old["tag_name"] = "v2.2.0"
+        with self.answer(json.dumps([tv, release(), old]).encode()):
+            info = updater.latest()
+        self.assertEqual(info["version"], "2.3.0")
+        with self.answer(json.dumps([tv]).encode()):
+            self.assertIsNone(updater.latest())
+
+    def test_notes_with_full_language_names(self):
+        body = "### Nederlands\r\n- Nieuw\r\n\r\n### Français\r\n- Nouveau"
+        self.assertEqual(updater.release_notes(body, "fr"), ["Nouveau"])
+        self.assertEqual(updater.release_notes(body, "nl"), ["Nieuw"])
+
     def test_download_installs_and_remembers_version(self):
         with self.answer(release()):
             info = updater.latest()

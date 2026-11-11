@@ -22,7 +22,9 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 REPO = "scoutr2019/zono"
-LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
+# all recent releases, not ".../latest": the TV apps are released here too (without Zono.exe), and one of
+# those may be marked "latest" on GitHub; then Windows would never see its own updates
+LATEST = f"https://api.github.com/repos/{REPO}/releases?per_page=30"
 ASSET = "Zono.exe"
 ROOT = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Zono"
 INSTALLED = ROOT / "Zono.exe"
@@ -66,14 +68,19 @@ def latest(timeout=10):
     """{version, url, size, sha256, notes} of the newest published release with a Zono.exe, or None."""
     request = Request(LATEST, headers={"Accept": "application/vnd.github+json", "User-Agent": "Zono-updater"})
     with urlopen(request, timeout=timeout) as response:
-        release = json.loads(response.read(2_000_000).decode("utf-8"))
-    if release.get("draft") or release.get("prerelease"):
+        answer = json.loads(response.read(5_000_000).decode("utf-8"))
+    best = None
+    for release in answer if isinstance(answer, list) else [answer]:
+        if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
+            continue
+        assets = release.get("assets") or []
+        found = next((a for a in assets if a.get("name") == ASSET), None) or \
+            next((a for a in assets if str(a.get("name", "")).lower().endswith(".exe")), None)
+        if found and (best is None or version_tuple(release.get("tag_name")) > version_tuple(best[0].get("tag_name"))):
+            best = (release, found)
+    if not best:
         return None
-    assets = release.get("assets") or []
-    asset = next((a for a in assets if a.get("name") == ASSET), None) or \
-        next((a for a in assets if str(a.get("name", "")).lower().endswith(".exe")), None)
-    if not asset:
-        return None
+    release, asset = best
     digest = str(asset.get("digest") or "")
     return {"version": str(release.get("tag_name", "")).lstrip("vV"), "url": asset.get("browser_download_url", ""),
             "size": int(asset.get("size") or 0), "sha256": digest[7:].lower() if digest.startswith("sha256:") else "",
@@ -87,9 +94,9 @@ def release_notes(body, language="nl"):
     Without those headings every bullet counts. Markdown marks are removed."""
     parts, plain, current = {}, [], None
     for line in str(body or "").splitlines():
-        head = re.match(r"^#{1,4}\s*(NL|FR|EN|DE)\b", line, re.I)
+        head = re.match(r"^#{1,4}\s*(NL|FR|EN|DE|Nederlands|Fran[cç]ais|English|Deutsch)\b", line, re.I)
         if head:
-            current = head.group(1).lower()
+            current = {"nederlands": "nl", "francais": "fr", "français": "fr", "english": "en", "deutsch": "de"}.get(head.group(1).lower(), head.group(1).lower())
             parts.setdefault(current, [])
             continue
         item = re.match(r"^\s*[-*]\s+(.+)", line)
