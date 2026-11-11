@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zono TV · Op je tv</title>
+<meta name="description" content="Zono op je LG-tv of Android TV zetten, stap voor stap.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgogIDxyZWN0IHg9IjY0IiB5PSI2NCIgd2lkdGg9Ijg5NiIgaGVpZ2h0PSI4OTYiIHJ4PSIyNDUiIGZpbGw9IiM1MzUwZjYiLz4KICA8cGF0aCBkPSJNMzA0IDM0MEg3MTVWNDM4TDQ0OSA2OTdINzE4Vjc5OEgzMDFWNjk2TDU2OCA0MzhIMzA0WiIgZmlsbD0iI2ZmZiIvPgogIDxjaXJjbGUgY3g9Ijc0OSIgY3k9Ijc3MCIgcj0iNDkiIGZpbGw9IiNmZmQzNjUiLz4KPC9zdmc+Cg==">
+<style>
+:root{--ink:#10101b;--violet:#514eff;--deep:#4b4aef;--paper:#f7f6ff;--line:rgba(19,17,42,.12);--muted:#5d5a72;--yellow:#ffd365;--soft:#efedff}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 Manrope,"Segoe UI",system-ui,sans-serif}
+a{color:var(--violet)}
+header{background:radial-gradient(circle at 85% 0,#8c71ff 0,transparent 35%),linear-gradient(135deg,#4b4aef,#763df7);color:#fff;padding:26px clamp(16px,6vw,90px) 96px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;font-weight:800;font-size:22px}
+.brand i{width:34px;height:34px;border-radius:11px;background:#fff;color:var(--deep);display:grid;place-items:center;font-style:normal;font-weight:900}
+.langs{display:flex;gap:6px;flex-wrap:wrap}
+.langs button{font:inherit;cursor:pointer;color:#fff;background:none;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
+.langs button[aria-current=true]{background:#fff;color:var(--deep)}
+h1{font:900 clamp(36px,6vw,64px)/1 "Nunito",system-ui,sans-serif;letter-spacing:-.04em;margin:46px 0 12px}
+header p{max-width:660px;color:rgba(255,255,255,.88);font-size:18px;margin:0}
+main{max-width:920px;margin:-64px auto 60px;padding:0 16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:26px clamp(18px,4vw,36px);margin-bottom:16px;box-shadow:0 18px 40px rgba(38,26,120,.06)}
+h2{font:800 24px/1.2 "Nunito",system-ui,sans-serif;margin:0 0 8px}
+h3{font:800 18px/1.3 "Nunito",system-ui,sans-serif;margin:0 0 4px}
+.muted,small{color:var(--muted)}
+/* choose your tv */
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.device{display:flex;flex-direction:column;gap:10px;text-align:left;font:inherit;color:inherit;cursor:pointer;background:#fff;border:2px solid var(--line);border-radius:24px;padding:22px;box-shadow:0 18px 40px rgba(38,26,120,.06);transition:border-color .15s,transform .15s}
+.device:hover{transform:translateY(-2px)}
+.device[aria-pressed=true]{border-color:var(--violet);box-shadow:0 18px 40px rgba(81,78,255,.18)}
+.device .icon{width:52px;height:52px;border-radius:16px;background:var(--soft);display:grid;place-items:center;color:var(--violet)}
+.device b{font:800 20px/1.2 "Nunito",system-ui,sans-serif}
+.device span{color:var(--muted);font-size:14px}
+.release{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.button{display:inline-flex;align-items:center;gap:10px;border-radius:999px;padding:13px 20px;font-weight:800;text-decoration:none;background:var(--violet);color:#fff;box-shadow:0 10px 24px rgba(81,78,255,.3)}
+.button.ghost{background:#fff;color:var(--violet);border:1px solid var(--line);box-shadow:none}
+.button svg{width:18px;height:18px}
+.version{font-size:14px;color:var(--muted)}
+/* steps */
+.part{margin:28px 0 10px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.part h2{margin:0}
+.tag{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--violet);background:var(--soft);border-radius:999px;padding:4px 10px}
+ol.steps{list-style:none;margin:0;padding:0;counter-reset:s}
+ol.steps>li{position:relative;counter-increment:s;background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px 20px 18px 76px;margin-bottom:10px}
+ol.steps>li::before{content:counter(s);position:absolute;left:20px;top:18px;width:38px;height:38px;border-radius:12px;background:var(--violet);color:#fff;display:grid;place-items:center;font:900 17px "Nunito",system-ui,sans-serif}
+ol.steps p{margin:2px 0 0;color:#2c2a40}
+.path{display:inline;font-weight:700;color:var(--ink);background:var(--soft);border-radius:8px;padding:1px 7px;line-height:1.9}
+kbd{font:800 13px/1 system-ui,sans-serif;border:1px solid var(--line);border-bottom-width:3px;border-radius:7px;padding:3px 7px;background:#fff}
+.code{display:inline-block;font:900 26px/1 "Nunito",system-ui,sans-serif;letter-spacing:.02em;color:var(--deep);background:var(--soft);border:2px dashed #c9c5ff;border-radius:14px;padding:10px 16px;margin-top:8px}
+.note{border-left:4px solid var(--yellow)}
+.or{display:flex;align-items:center;gap:12px;color:var(--muted);font-weight:700;margin:18px 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+details{background:#fff;border:1px solid var(--line);border-radius:18px;padding:14px 20px;margin-bottom:10px}
+summary{cursor:pointer;font-weight:800}
+details p{margin:8px 0 2px}
+footer{text-align:center;color:var(--muted);font-size:14px;padding:0 16px 40px}
+[hidden]{display:none!important}
+@media(max-width:640px){.pick{grid-template-columns:1fr}ol.steps>li{padding:66px 16px 16px}ol.steps>li::before{left:16px;top:16px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <a class="brand" href="/"><i>z</i>zono tv</a>
+    <nav class="langs" aria-label="Taal / Language"><button data-pick="nl">Nederlands</button><button data-pick="fr">Français</button><button data-pick="en">English</button><button data-pick="de">Deutsch</button></nav>
+  </div>
+  <h1 data-t="title"></h1>
+  <p data-t="lead"></p>
+</header>
+<main>
+  <div class="pick" role="group">
+    <button class="device" data-device="android" aria-pressed="true">
+      <span class="icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/></svg></span>
+      <b>Android TV</b><span data-t="androidSub"></span>
+    </button>
+    <button class="device" data-device="lg" aria-pressed="false">
+      <span class="icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M7 21h10"/><circle cx="12" cy="10.5" r="3"/></svg></span>
+      <b>LG (webOS)</b><span data-t="lgSub"></span>
+    </button>
+  </div>
+
+  <div class="card release">
+    <div><h3 data-t="download"></h3><div class="version" id="version" data-t="checking"></div></div>
+    <a class="button" id="get" href="https://github.com/scoutr2019/zono/releases/download/tv/Zono-TV.apk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="get-label"></span></a>
+  </div>
+
+  <section id="steps"></section>
+
+  <div class="part"><h2 data-t="faqTitle"></h2></div>
+  <div id="faq"></div>
+  <div class="card note"><p data-t="playerOnly" style="margin:0"></p></div>
+</main>
+<footer>© 2026 Zono TV · <a href="/">zono.be</a> · <a href="/privacy.html">Privacy</a> · <a href="mailto:support@zono.be">support@zono.be</a> · <a href="https://github.com/scoutr2019/zono/releases/tag/tv">GitHub</a></footer>
+<script>
+/* The newest TV version comes from GitHub (release "tv", files Zono-TV.apk and Zono-TV.ipk):
+   nothing on this page has to change for a new version. */
+var GH = "https://github.com/scoutr2019/zono/releases/download/tv/";
+var T = {
+nl: {
+  title: "Zono op je tv",
+  lead: "Dezelfde Zono, nu ook op je grote scherm. Kies je tv en volg de stappen. Een paar minuten werk, daarna log je in met je gsm.",
+  androidSub: "Google TV, Android TV, Android-box, Nvidia Shield, Fire TV",
+  lgSub: "LG smart-tv van 2018 of nieuwer, met een pc",
+  download: "Download", checking: "Nieuwste versie ophalen…", version: "Versie", getApk: "Download voor Android TV", getIpk: "Download voor LG",
+  ad: { tag: "Zonder pc", title: "Met de app Downloader", steps: [
+    ["Installeer Downloader", "Open op je tv de <span class=path>Play Store</span>, zoek <b>Downloader</b> (van AFTVnews) en installeer de app. Op een Fire TV vind je hem bij <span class=path>Zoeken</span>."],
+    ["Typ het adres", "Open Downloader en typ in het vak:<br><span class=code>zono.be/apk</span><br>Druk op <b>Go</b>. Zono wordt gedownload."],
+    ["Sta de installatie toe", "De eerste keer vraagt je tv of Downloader apps mag installeren. Kies <b>Instellingen</b>, zet <b>Downloader</b> aan en druk op <kbd>Terug</kbd>. Op een Fire TV: <span class=path>Instellingen › Mijn Fire TV › Ontwikkelaarsopties › Onbekende apps installeren</span>."],
+    ["Installeer Zono", "Kies <b>Installeren</b> en daarna <b>Openen</b>. Downloader vraagt of het bestand weg mag: kies <b>Verwijderen</b>, Zono blijft gewoon staan."]
+  ]},
+  au: { tag: "Met een USB-stick", title: "Met een USB-stick of je gsm", steps: [
+    ["Download het bestand", "Klik hierboven op <b>Download voor Android TV</b>. Zet <b>Zono-TV.apk</b> op een USB-stick, of stuur het met de app <b>Send Files to TV</b> van je gsm naar je tv."],
+    ["Open het op je tv", "Installeer een bestandsbeheerder uit de Play Store, bijvoorbeeld <b>File Commander</b>. Open de stick of de map <span class=path>Download</span> en klik op <b>Zono-TV.apk</b>."],
+    ["Sta de installatie toe", "Vraagt de tv toestemming? Zet de bestandsbeheerder aan bij <span class=path>Instellingen › Apps › Beveiliging en beperkingen › Onbekende bronnen</span> en klik opnieuw op het bestand."]
+  ]},
+  lg: [
+    { tag: "Eén keer, op de pc", title: "Je LG klaarzetten", steps: [
+      ["Maak een gratis LG-account", "Ga op je pc naar <a href='https://webostv.developer.lge.com' target=_blank rel=noopener>webostv.developer.lge.com</a>, klik op <b>Sign In</b> en maak een account. Dat is gratis."],
+      ["Installeer Developer Mode op je tv", "Open op je tv de <span class=path>LG Content Store</span> (of <span class=path>Apps</span>), zoek <b>Developer Mode</b> en installeer de app."],
+      ["Zet Developer Mode aan", "Open Developer Mode, log in met je LG-account en zet <b>Dev Mode Status</b> aan. De tv start opnieuw op."],
+      ["Zet Key Server aan", "Open Developer Mode opnieuw en zet <b>Key Server</b> aan. Laat dit scherm open: je ziet er het <b>IP-adres</b> van je tv en een <b>Passphrase</b> van 6 tekens."],
+      ["Installeer Dev Manager op je pc", "Download <a href='https://github.com/webosbrew/dev-manager-desktop/releases/latest' target=_blank rel=noopener>webOS Dev Manager</a> (voor Windows het bestand dat eindigt op <b>setup.exe</b>) en installeer het."],
+      ["Koppel je tv", "Open Dev Manager en voeg je tv toe. Vul het <b>IP-adres</b> en de <b>Passphrase</b> in van het tv-scherm. Let op hoofdletters. De pc en de tv moeten op hetzelfde netwerk zitten."]
+    ]},
+    { tag: "Zono installeren", title: "Zono op je LG zetten", steps: [
+      ["Download Zono", "Klik hierboven op <b>Download voor LG</b>. Je krijgt het bestand <b>Zono-TV.ipk</b>."],
+      ["Installeer het", "Ga in Dev Manager naar <b>Apps</b> en klik op de knop om een app te installeren (het pijltje omhoog), of sleep <b>Zono-TV.ipk</b> in het venster."],
+      ["Open Zono", "Zono staat nu bij je apps op de tv. Je kunt hem in de balk onderaan naar voren schuiven."]
+    ]}
+  ],
+  lgNote: "<b>Belangrijk voor LG:</b> Developer Mode loopt na 1000 uur (ongeveer 6 weken) af en dan haalt de tv Zono weg. Open daarom af en toe de app Developer Mode en druk op <b>Extend</b>. De resterende tijd staat bij <b>Remain Session</b>. Is de tijd toch voorbij? Zet Developer Mode opnieuw aan en installeer Zono opnieuw: je profielen en instellingen moet je dan opnieuw koppelen.",
+  login: { tag: "Laatste stap", title: "Inloggen met je gsm", steps: [
+    ["Scan de QR-code", "Zono toont een QR-code. Scan hem met je gsm."],
+    ["Vul je gegevens in op je gsm", "Typ je provider in op je gsm in plaats van met de afstandsbediening. Kies ook je landen, de taal en hoe Zono je mag noemen."],
+    ["Kijken", "Je tv haalt je zenders, films en series op. Na een paar seconden kun je al live tv kijken."]
+  ]},
+  faqTitle: "Vragen",
+  faq: [
+    ["Hoe krijg ik een nieuwe versie?", "Android TV: doe de stappen opnieuw, met Downloader en <b>zono.be/apk</b>. De nieuwe versie komt over de oude heen en alles blijft bewaard. LG: download de nieuwe <b>Zono-TV.ipk</b> en installeer hem in Dev Manager zoals de eerste keer. Deze pagina toont altijd de nieuwste versie."],
+    ["Werkt het op een Samsung-tv?", "Nog niet. Met een Android-box of een Fire TV-stick aan je tv werkt het wel."],
+    ["Mijn LG vindt Dev Manager niet.", "Kijk of <b>Key Server</b> aan staat in Developer Mode, of pc en tv op hetzelfde netwerk zitten, en of het IP-adres klopt. Het IP-adres van een tv kan na een herstart veranderen."],
+    ["Is dit veilig?", "Zono staat open op GitHub. Je gegevens blijven op je tv; je provider zie je alleen zelf. Download Zono alleen via zono.be of GitHub."]
+  ],
+  playerOnly: "Zono is alleen de player. Er zitten geen streams of zenders in: je gebruikt je eigen abonnement."
+},
+fr: {
+  title: "Zono sur votre télé",
+  lead: "Le même Zono, maintenant sur grand écran. Choisissez votre télé et suivez les étapes. Quelques minutes suffisent, puis vous vous connectez avec votre téléphone.",
+  androidSub: "Google TV, Android TV, box Android, Nvidia Shield, Fire TV",
+  lgSub: "Smart TV LG de 2018 ou plus récente, avec un PC",
+  download: "Télécharger", checking: "Recherche de la dernière version…", version: "Version", getApk: "Télécharger pour Android TV", getIpk: "Télécharger pour LG",
+  ad: { tag: "Sans PC", title: "Avec l'application Downloader", steps: [
+    ["Installez Downloader", "Sur votre télé, ouvrez le <span class=path>Play Store</span>, cherchez <b>Downloader</b> (de AFTVnews) et installez-le. Sur une Fire TV, passez par <span class=path>Rechercher</span>."],
+    ["Tapez l'adresse", "Ouvrez Downloader et tapez :<br><span class=code>zono.be/apk</span><br>Appuyez sur <b>Go</b>. Zono se télécharge."],
+    ["Autorisez l'installation", "La première fois, la télé demande si Downloader peut installer des applis. Choisissez <b>Paramètres</b>, activez <b>Downloader</b> et appuyez sur <kbd>Retour</kbd>. Sur une Fire TV : <span class=path>Paramètres › Ma Fire TV › Options pour les développeurs › Installer des applis inconnues</span>."],
+    ["Installez Zono", "Choisissez <b>Installer</b> puis <b>Ouvrir</b>. Downloader propose de supprimer le fichier : choisissez <b>Supprimer</b>, Zono reste installé."]
+  ]},
+  au: { tag: "Avec une clé USB", title: "Avec une clé USB ou votre téléphone", steps: [
+    ["Téléchargez le fichier", "Cliquez ci-dessus sur <b>Télécharger pour Android TV</b>. Copiez <b>Zono-TV.apk</b> sur une clé USB, ou envoyez-le avec l'appli <b>Send Files to TV</b>."],
+    ["Ouvrez-le sur la télé", "Installez un gestionnaire de fichiers depuis le Play Store, par exemple <b>File Commander</b>. Ouvrez la clé ou le dossier <span class=path>Download</span> et cliquez sur <b>Zono-TV.apk</b>."],
+    ["Autorisez l'installation", "La télé demande une autorisation ? Activez le gestionnaire de fichiers dans <span class=path>Paramètres › Applications › Sécurité et restrictions › Sources inconnues</span> et cliquez à nouveau sur le fichier."]
+  ]},
+  lg: [
+    { tag: "Une seule fois, sur le PC", title: "Préparer votre LG", steps: [
+      ["Créez un compte LG gratuit", "Sur votre PC, allez sur <a href='https://webostv.developer.lge.com' target=_blank rel=noopener>webostv.developer.lge.com</a>, cliquez sur <b>Sign In</b> et créez un compte gratuit."],
+      ["Installez Developer Mode sur la télé", "Ouvrez le <span class=path>LG Content Store</span> (ou <span class=path>Apps</span>), cherchez <b>Developer Mode</b> et installez-le."],
+      ["Activez Developer Mode", "Ouvrez Developer Mode, connectez-vous avec votre compte LG et activez <b>Dev Mode Status</b>. La télé redémarre."],
+      ["Activez Key Server", "Rouvrez Developer Mode et activez <b>Key Server</b>. Laissez cet écran ouvert : il affiche l'<b>adresse IP</b> de la télé et une <b>Passphrase</b> de 6 caractères."],
+      ["Installez Dev Manager sur le PC", "Téléchargez <a href='https://github.com/webosbrew/dev-manager-desktop/releases/latest' target=_blank rel=noopener>webOS Dev Manager</a> (sous Windows, le fichier qui se termine par <b>setup.exe</b>) et installez-le."],
+      ["Associez votre télé", "Ouvrez Dev Manager et ajoutez votre télé avec l'<b>adresse IP</b> et la <b>Passphrase</b> affichées. Attention aux majuscules. Le PC et la télé doivent être sur le même réseau."]
+    ]},
+    { tag: "Installer Zono", title: "Mettre Zono sur votre LG", steps: [
+      ["Téléchargez Zono", "Cliquez ci-dessus sur <b>Télécharger pour LG</b>. Vous obtenez <b>Zono-TV.ipk</b>."],
+      ["Installez-le", "Dans Dev Manager, allez dans <b>Apps</b> et cliquez sur le bouton d'installation (la flèche vers le haut), ou glissez <b>Zono-TV.ipk</b> dans la fenêtre."],
+      ["Ouvrez Zono", "Zono apparaît dans vos applis sur la télé."]
+    ]}
+  ],
+  lgNote: "<b>Important pour LG :</b> Developer Mode expire après 1000 heures (environ 6 semaines) et la télé supprime alors Zono. Ouvrez donc de temps en temps Developer Mode et appuyez sur <b>Extend</b>. Le temps restant s'affiche à <b>Remain Session</b>.",
+  login: { tag: "Dernière étape", title: "Se connecter avec le téléphone", steps: [
+    ["Scannez le code QR", "Zono affiche un code QR. Scannez-le avec votre téléphone."],
+    ["Remplissez sur le téléphone", "Tapez votre fournisseur sur le téléphone plutôt qu'avec la télécommande. Choisissez aussi vos pays, la langue et votre prénom."],
+    ["Regardez", "La télé charge vos chaînes, films et séries. Après quelques secondes, la TV en direct fonctionne déjà."]
+  ]},
+  faqTitle: "Questions",
+  faq: [
+    ["Comment obtenir une nouvelle version ?", "Android TV : refaites les étapes avec Downloader et <b>zono.be/apk</b>. La nouvelle version remplace l'ancienne et tout est conservé. LG : téléchargez le nouveau <b>Zono-TV.ipk</b> et installez-le dans Dev Manager. Cette page affiche toujours la dernière version."],
+    ["Ça marche sur une télé Samsung ?", "Pas encore. Avec une box Android ou une clé Fire TV branchée sur la télé, oui."],
+    ["Dev Manager ne trouve pas ma LG.", "Vérifiez que <b>Key Server</b> est activé, que le PC et la télé sont sur le même réseau et que l'adresse IP est correcte. Elle peut changer après un redémarrage."],
+    ["Est-ce sûr ?", "Zono est open source sur GitHub. Vos données restent sur votre télé. Téléchargez Zono uniquement via zono.be ou GitHub."]
+  ],
+  playerOnly: "Zono est uniquement le lecteur. Aucun flux ni chaîne inclus : vous utilisez votre propre abonnement."
+},
+en: {
+  title: "Zono on your TV",
+  lead: "The same Zono, now on your big screen. Pick your TV and follow the steps. It takes a few minutes, then you sign in with your phone.",
+  androidSub: "Google TV, Android TV, Android box, Nvidia Shield, Fire TV",
+  lgSub: "LG smart TV from 2018 or newer, with a PC",
+  download: "Download", checking: "Getting the newest version…", version: "Version", getApk: "Download for Android TV", getIpk: "Download for LG",
+  ad: { tag: "No PC needed", title: "With the Downloader app", steps: [
+    ["Install Downloader", "On your TV, open the <span class=path>Play Store</span>, search for <b>Downloader</b> (by AFTVnews) and install it. On a Fire TV, use <span class=path>Search</span>."],
+    ["Type the address", "Open Downloader and type:<br><span class=code>zono.be/apk</span><br>Press <b>Go</b>. Zono downloads."],
+    ["Allow the install", "The first time, the TV asks whether Downloader may install apps. Choose <b>Settings</b>, turn on <b>Downloader</b> and press <kbd>Back</kbd>. On a Fire TV: <span class=path>Settings › My Fire TV › Developer options › Install unknown apps</span>."],
+    ["Install Zono", "Choose <b>Install</b>, then <b>Open</b>. Downloader offers to delete the file: choose <b>Delete</b>, Zono stays installed."]
+  ]},
+  au: { tag: "With a USB stick", title: "With a USB stick or your phone", steps: [
+    ["Download the file", "Click <b>Download for Android TV</b> above. Put <b>Zono-TV.apk</b> on a USB stick, or send it with the <b>Send Files to TV</b> app."],
+    ["Open it on the TV", "Install a file manager from the Play Store, such as <b>File Commander</b>. Open the stick or the <span class=path>Download</span> folder and click <b>Zono-TV.apk</b>."],
+    ["Allow the install", "Does the TV ask for permission? Turn on the file manager in <span class=path>Settings › Apps › Security &amp; restrictions › Unknown sources</span> and click the file again."]
+  ]},
+  lg: [
+    { tag: "Once, on the PC", title: "Get your LG ready", steps: [
+      ["Make a free LG account", "On your PC, go to <a href='https://webostv.developer.lge.com' target=_blank rel=noopener>webostv.developer.lge.com</a>, click <b>Sign In</b> and create a free account."],
+      ["Install Developer Mode on the TV", "Open the <span class=path>LG Content Store</span> (or <span class=path>Apps</span>), search for <b>Developer Mode</b> and install it."],
+      ["Turn on Developer Mode", "Open Developer Mode, sign in with your LG account and turn on <b>Dev Mode Status</b>. The TV restarts."],
+      ["Turn on Key Server", "Open Developer Mode again and turn on <b>Key Server</b>. Leave this screen open: it shows the TV's <b>IP address</b> and a 6-character <b>Passphrase</b>."],
+      ["Install Dev Manager on the PC", "Download <a href='https://github.com/webosbrew/dev-manager-desktop/releases/latest' target=_blank rel=noopener>webOS Dev Manager</a> (on Windows, the file ending in <b>setup.exe</b>) and install it."],
+      ["Connect your TV", "Open Dev Manager and add your TV with the <b>IP address</b> and <b>Passphrase</b> from the TV screen. Mind the capitals. The PC and TV must be on the same network."]
+    ]},
+    { tag: "Install Zono", title: "Put Zono on your LG", steps: [
+      ["Download Zono", "Click <b>Download for LG</b> above. You get <b>Zono-TV.ipk</b>."],
+      ["Install it", "In Dev Manager, go to <b>Apps</b> and click the install button (the up arrow), or drag <b>Zono-TV.ipk</b> into the window."],
+      ["Open Zono", "Zono is now in your apps on the TV."]
+    ]}
+  ],
+  lgNote: "<b>Important for LG:</b> Developer Mode runs out after 1000 hours (about 6 weeks), and the TV then removes Zono. So open the Developer Mode app now and then and press <b>Extend</b>. The time left is shown at <b>Remain Session</b>.",
+  login: { tag: "Last step", title: "Sign in with your phone", steps: [
+    ["Scan the QR code", "Zono shows a QR code. Scan it with your phone."],
+    ["Fill in on your phone", "Type your provider details on your phone instead of with the remote. Also pick your countries, the language and what Zono should call you."],
+    ["Watch", "The TV fetches your channels, movies and series. After a few seconds live TV already works."]
+  ]},
+  faqTitle: "Questions",
+  faq: [
+    ["How do I get a new version?", "Android TV: repeat the steps with Downloader and <b>zono.be/apk</b>. The new version installs over the old one and everything is kept. LG: download the new <b>Zono-TV.ipk</b> and install it in Dev Manager. This page always shows the newest version."],
+    ["Does it work on a Samsung TV?", "Not yet. With an Android box or a Fire TV stick on your TV, it does."],
+    ["Dev Manager can't find my LG.", "Check that <b>Key Server</b> is on, that the PC and TV are on the same network and that the IP address is right. It can change after a restart."],
+    ["Is this safe?", "Zono is open source on GitHub. Your details stay on your TV. Only download Zono from zono.be or GitHub."]
+  ],
+  playerOnly: "Zono is just the player. No streams or channels are included: you use your own subscription."
+},
+de: {
+  title: "Zono auf deinem Fernseher",
+  lead: "Dasselbe Zono, jetzt auf dem großen Bildschirm. Wähle deinen Fernseher und folge den Schritten. Ein paar Minuten, dann meldest du dich mit dem Handy an.",
+  androidSub: "Google TV, Android TV, Android-Box, Nvidia Shield, Fire TV",
+  lgSub: "LG Smart-TV ab 2018, mit einem PC",
+  download: "Download", checking: "Neueste Version wird geladen…", version: "Version", getApk: "Für Android TV herunterladen", getIpk: "Für LG herunterladen",
+  ad: { tag: "Ohne PC", title: "Mit der App Downloader", steps: [
+    ["Downloader installieren", "Öffne auf dem Fernseher den <span class=path>Play Store</span>, suche <b>Downloader</b> (von AFTVnews) und installiere die App. Auf einem Fire TV über <span class=path>Suchen</span>."],
+    ["Adresse eingeben", "Öffne Downloader und gib ein:<br><span class=code>zono.be/apk</span><br>Drücke <b>Go</b>. Zono wird heruntergeladen."],
+    ["Installation erlauben", "Beim ersten Mal fragt der Fernseher, ob Downloader Apps installieren darf. Wähle <b>Einstellungen</b>, schalte <b>Downloader</b> ein und drücke <kbd>Zurück</kbd>. Auf einem Fire TV: <span class=path>Einstellungen › Mein Fire TV › Entwickleroptionen › Unbekannte Apps installieren</span>."],
+    ["Zono installieren", "Wähle <b>Installieren</b> und dann <b>Öffnen</b>. Downloader bietet an, die Datei zu löschen: wähle <b>Löschen</b>, Zono bleibt installiert."]
+  ]},
+  au: { tag: "Mit USB-Stick", title: "Mit USB-Stick oder Handy", steps: [
+    ["Datei herunterladen", "Klicke oben auf <b>Für Android TV herunterladen</b>. Kopiere <b>Zono-TV.apk</b> auf einen USB-Stick oder schicke sie mit der App <b>Send Files to TV</b>."],
+    ["Auf dem Fernseher öffnen", "Installiere einen Dateimanager aus dem Play Store, zum Beispiel <b>File Commander</b>. Öffne den Stick oder den Ordner <span class=path>Download</span> und klicke auf <b>Zono-TV.apk</b>."],
+    ["Installation erlauben", "Fragt der Fernseher nach einer Erlaubnis? Schalte den Dateimanager ein unter <span class=path>Einstellungen › Apps › Sicherheit &amp; Einschränkungen › Unbekannte Quellen</span> und klicke erneut auf die Datei."]
+  ]},
+  lg: [
+    { tag: "Einmalig, am PC", title: "Deinen LG vorbereiten", steps: [
+      ["Kostenloses LG-Konto anlegen", "Gehe am PC auf <a href='https://webostv.developer.lge.com' target=_blank rel=noopener>webostv.developer.lge.com</a>, klicke auf <b>Sign In</b> und lege ein kostenloses Konto an."],
+      ["Developer Mode auf dem Fernseher installieren", "Öffne den <span class=path>LG Content Store</span> (oder <span class=path>Apps</span>), suche <b>Developer Mode</b> und installiere die App."],
+      ["Developer Mode einschalten", "Öffne Developer Mode, melde dich mit deinem LG-Konto an und schalte <b>Dev Mode Status</b> ein. Der Fernseher startet neu."],
+      ["Key Server einschalten", "Öffne Developer Mode erneut und schalte <b>Key Server</b> ein. Lass diesen Bildschirm offen: Er zeigt die <b>IP-Adresse</b> des Fernsehers und eine 6-stellige <b>Passphrase</b>."],
+      ["Dev Manager am PC installieren", "Lade <a href='https://github.com/webosbrew/dev-manager-desktop/releases/latest' target=_blank rel=noopener>webOS Dev Manager</a> herunter (unter Windows die Datei mit <b>setup.exe</b> am Ende) und installiere ihn."],
+      ["Fernseher verbinden", "Öffne Dev Manager und füge deinen Fernseher mit <b>IP-Adresse</b> und <b>Passphrase</b> hinzu. Achte auf Groß- und Kleinschreibung. PC und Fernseher müssen im selben Netzwerk sein."]
+    ]},
+    { tag: "Zono installieren", title: "Zono auf deinen LG bringen", steps: [
+      ["Zono herunterladen", "Klicke oben auf <b>Für LG herunterladen</b>. Du bekommst <b>Zono-TV.ipk</b>."],
+      ["Installieren", "Gehe in Dev Manager zu <b>Apps</b> und klicke auf die Installieren-Schaltfläche (Pfeil nach oben), oder ziehe <b>Zono-TV.ipk</b> ins Fenster."],
+      ["Zono öffnen", "Zono ist jetzt bei deinen Apps auf dem Fernseher."]
+    ]}
+  ],
+  lgNote: "<b>Wichtig für LG:</b> Developer Mode läuft nach 1000 Stunden (etwa 6 Wochen) ab, dann entfernt der Fernseher Zono. Öffne deshalb ab und zu die App Developer Mode und drücke <b>Extend</b>. Die Restzeit steht bei <b>Remain Session</b>.",
+  login: { tag: "Letzter Schritt", title: "Mit dem Handy anmelden", steps: [
+    ["QR-Code scannen", "Zono zeigt einen QR-Code. Scanne ihn mit deinem Handy."],
+    ["Am Handy ausfüllen", "Gib deinen Anbieter am Handy ein statt mit der Fernbedienung. Wähle auch deine Länder, die Sprache und wie Zono dich nennen soll."],
+    ["Schauen", "Der Fernseher lädt deine Sender, Filme und Serien. Nach ein paar Sekunden läuft Live-TV schon."]
+  ]},
+  faqTitle: "Fragen",
+  faq: [
+    ["Wie bekomme ich eine neue Version?", "Android TV: wiederhole die Schritte mit Downloader und <b>zono.be/apk</b>. Die neue Version wird über die alte installiert, alles bleibt erhalten. LG: lade die neue <b>Zono-TV.ipk</b> und installiere sie in Dev Manager. Diese Seite zeigt immer die neueste Version."],
+    ["Geht es auf einem Samsung-Fernseher?", "Noch nicht. Mit einer Android-Box oder einem Fire TV Stick am Fernseher schon."],
+    ["Dev Manager findet meinen LG nicht.", "Prüfe, ob <b>Key Server</b> an ist, ob PC und Fernseher im selben Netzwerk sind und ob die IP-Adresse stimmt. Sie kann sich nach einem Neustart ändern."],
+    ["Ist das sicher?", "Zono ist Open Source auf GitHub. Deine Daten bleiben auf dem Fernseher. Lade Zono nur von zono.be oder GitHub."]
+  ],
+  playerOnly: "Zono ist nur der Player. Es sind keine Streams oder Sender enthalten: Du nutzt dein eigenes Abo."
+}};
+var LOCALE = { nl: "nl-BE", fr: "fr-BE", en: "en-GB", de: "de-DE" };
+var lang = "nl", device = "android", release = null;
+
+function part(p) {
+  return '<div class="part"><span class="tag">' + p.tag + '</span><h2>' + p.title + '</h2></div><ol class="steps">' +
+    p.steps.map(function (s) { return '<li><h3>' + s[0] + '</h3><p>' + s[1] + '</p></li>'; }).join("") + '</ol>';
+}
+function render() {
+  var t = T[lang];
+  document.documentElement.lang = lang;
+  document.title = "Zono TV · " + t.title;
+  document.querySelectorAll("[data-t]").forEach(function (e) { e.innerHTML = t[e.getAttribute("data-t")]; });
+  document.querySelectorAll("[data-pick]").forEach(function (b) { b.setAttribute("aria-current", String(b.getAttribute("data-pick") === lang)); });
+  document.querySelectorAll("[data-device]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-device") === device)); });
+  var android = device === "android";
+  document.getElementById("get").href = GH + (android ? "Zono-TV.apk" : "Zono-TV.ipk");
+  document.getElementById("get-label").textContent = android ? t.getApk : t.getIpk;
+  var html = android ? part(t.ad) + '<div class="or">' + (lang === "fr" ? "ou" : lang === "de" ? "oder" : lang === "en" ? "or" : "of") + '</div>' + part(t.au)
+    : part(t.lg[0]) + part(t.lg[1]) + '<div class="card note" style="margin-top:6px">' + t.lgNote + '</div>';
+  document.getElementById("steps").innerHTML = html + part(t.login);
+  document.getElementById("faq").innerHTML = t.faq.map(function (q) { return "<details><summary>" + q[0] + "</summary><p>" + q[1] + "</p></details>"; }).join("");
+  showVersion();
+}
+function showVersion() {
+  var el = document.getElementById("version");
+  if (!release) return;
+  var file = release.assets.filter(function (a) { return a.name === (device === "android" ? "Zono-TV.apk" : "Zono-TV.ipk"); })[0];
+  var number = (String(release.name || "").match(/\d+\.\d+(\.\d+)?/) || [""])[0];
+  var when = new Date((file && file.updated_at) || release.published_at).toLocaleDateString(LOCALE[lang], { day: "numeric", month: "long", year: "numeric" });
+  el.textContent = T[lang].version + " " + number + " · " + when + (file ? " · " + (file.size / 1048576).toFixed(1) + " MB" : "");
+}
+document.querySelectorAll("[data-pick]").forEach(function (b) { b.onclick = function () {
+  lang = b.getAttribute("data-pick"); try { localStorage.setItem("zono-language", lang); } catch (e) {} render();
+}; });
+document.querySelectorAll("[data-device]").forEach(function (b) { b.onclick = function () {
+  device = b.getAttribute("data-device"); history.replaceState(null, "", "#" + device); render();
+}; });
+(function () {
+  var pick = new URLSearchParams(location.search).get("lang");
+  try { pick = pick || localStorage.getItem("zono-language"); } catch (e) {}
+  if (!T[pick]) { var b = (navigator.language || "nl").slice(0, 2); pick = T[b] ? b : "nl"; }
+  lang = pick;
+  if (location.hash === "#lg" || (!location.hash && /web0s|webos|netcast/i.test(navigator.userAgent))) device = "lg";
+  render();
+  fetch("https://api.github.com/repos/scoutr2019/zono/releases/tags/tv", { headers: { Accept: "application/vnd.github+json" } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) { if (data && data.assets) { release = data; showVersion(); } else document.getElementById("version").textContent = ""; })
+    .catch(function () { document.getElementById("version").textContent = ""; });
+})();
+</script>
+</body>
+</html>
