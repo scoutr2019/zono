@@ -165,7 +165,17 @@ h3{font-size:22px;font-weight:800;letter-spacing:-.01em}
 .stage img{transition:opacity .35s ease}
 .stage img.fade{opacity:0}
 .tour .steps button:focus-visible{outline:3px solid var(--violet);outline-offset:4px}
-.stage{position:sticky;top:30px}
+.stage{position:sticky;top:calc(50vh - 200px)}
+@media (min-width:981px){
+  /* scrolling through the steps: each step gets room, the tv stays in the middle and follows the step you read */
+  .tour .steps li{min-height:34vh;display:flex;align-items:center;border-bottom:1px solid var(--line)}
+  .tour .steps li:last-child{min-height:44vh}
+  .tour .steps button{border-bottom:0;padding:22px 0}
+  .tour .steps button b{font-size:24px}
+  .tour .steps button[aria-pressed=false]{opacity:.45;transition:opacity .3s}
+  .tour .steps button[aria-pressed=true]{opacity:1}
+  .tour .steps .timer{display:none}
+}
 .stage .panel{background:#05040f;border-radius:16px;padding:10px;box-shadow:0 30px 60px rgba(22,19,58,.25)}
 .stage img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:7px;background:#0d0b22}
 .stage .foot{width:30%;height:14px;margin:0 auto;background:linear-gradient(#cfcdea,#9a97c6);border-radius:0 0 10px 10px}
@@ -552,17 +562,20 @@ function render() {
   document.documentElement.lang = lang;
   document.title = TITLES[lang];
   document.querySelectorAll("[data-t]").forEach(function (el) { el.innerHTML = t[el.getAttribute("data-t")]; });
-  document.getElementById("pc-shot").src = "img/zono-collection-" + (lang === "nl" ? "v2" : lang) + ".webp";
+  document.getElementById("pc-shot").src = "img/zono-windows-home-" + lang + ".webp";
   document.getElementById("tv-shot").src = PICS + lang + "/discover.jpg";
   var front = document.getElementById("tv-next"); front.classList.remove("on"); front.removeAttribute("src"); // no old language left on the tv
-  document.getElementById("win-shot").src = "img/zono-guide-" + (lang === "nl" ? "v2" : lang) + ".webp";
+  document.getElementById("win-shot").src = "img/zono-windows-movie-" + lang + ".webp";
   document.getElementById("lg-shot").src = PICS + lang + "/live.jpg";
   document.getElementById("android-shot").src = PICS + lang + "/film.jpg";
   document.getElementById("steps").innerHTML = t.tour.map(function (s, i) {
     return '<li><button type="button" data-shot="' + i + '" aria-pressed="' + (i === shot) + '"><b>' + s[1] + "</b><span>" + s[2] + '</span></button><i class="timer"></i></li>';
   }).join("");
   document.querySelectorAll("[data-shot]").forEach(function (b) {
-    b.onclick = function () { shot = +b.getAttribute("data-shot"); stopTour(); showShot(); };
+    b.onclick = function () {
+      shot = +b.getAttribute("data-shot"); stopTour(); showShot();
+      if (wide()) { var li = b.parentElement, r = li.getBoundingClientRect(); scrollBy({ top: (r.top + r.bottom) / 2 - innerHeight / 2, behavior: "smooth" }); }
+    };
   });
   document.getElementById("more").innerHTML = t.more.map(function (m) { return "<div>" + icon(m[0]) + "<p><b>" + m[1] + "</b><span>" + m[2] + "</span></p></div>"; }).join("");
   document.getElementById("faq").innerHTML = t.faq.map(function (q) { return "<details><summary>" + q[0] + "</summary><p>" + q[1] + "</p></details>"; }).join("");
@@ -585,7 +598,21 @@ function showShot() {
 /* the tour plays by itself (5 s per screen) until you pick one */
 var tourTimer = null, tourStopped = false;
 function stopTour() { tourStopped = true; clearInterval(tourTimer); document.querySelector(".tour").classList.add("stopped"); }
+function wide() { return window.matchMedia && matchMedia("(min-width: 981px)").matches; }
+/* on a wide screen the step you are reading (the one in the middle of the screen) picks the picture */
+function followScroll() {
+  if (!wide()) return;
+  var best = null, bestGap = Infinity, middle = innerHeight / 2;
+  document.querySelectorAll("#steps li").forEach(function (li, i) {
+    var r = li.getBoundingClientRect(), gap = Math.abs((r.top + r.bottom) / 2 - middle);
+    if (r.bottom > 0 && r.top < innerHeight && gap < bestGap) { bestGap = gap; best = i; }
+  });
+  if (best !== null && best !== shot) { shot = best; showShot(); }
+}
+var scrollQueued = false;
+addEventListener("scroll", function () { if (!scrollQueued) { scrollQueued = true; requestAnimationFrame(function () { scrollQueued = false; followScroll(); }); } }, { passive: true });
 function startTour() {
+  if (wide()) return; // the scroll does it
   if (tourStopped || tourTimer || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
   tourTimer = setInterval(function () { shot = (shot + 1) % T[lang].tour.length; showShot(); }, 5000);
 }
