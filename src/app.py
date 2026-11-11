@@ -44,7 +44,7 @@ import telemetry
 import updater
 from i18n import T
 
-VERSION = "2.3.7"
+VERSION = "2.3.8"
 TABS = {"home": T("Ontdekken"), "live": T("Live TV"), "guide": T("TV-gids"), "movie": T("Films"), "series": T("Series"),
         "favorites": T("Favorieten"), "downloads": T("Downloads"), "settings": T("Instellingen")}
 SAFE_MODE = False

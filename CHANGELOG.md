@@ -1,5 +1,11 @@
 # Wijzigingen
 
+## 2.3.8
+- Koppelen tussen je toestellen: "Verder kijken", favorieten en je laatste zender gaan mee tussen Windows, LG en Android TV met hetzelfde abonnement. Kijk een film half op je pc en kijk verder op je tv (en omgekeerd); wat je ergens uitkeek, verdwijnt overal uit "Verder kijken".
+- Volledig versleuteld (NaCl secretbox): de sleutel wordt op je toestel gemaakt uit je abonnement en komt nooit op zono.be; de server bewaart alleen een pakketje dat hij niet kan openen.
+- Koppelcode als alternatief (gedeeld abonnement, afspeellijst): Instellingen › Je andere toestellen.
+- Server: `api/sync.php`.
+
 ## 2.3.7
 Vanaf nu één versienummer voor Zono op Windows, LG en Android TV. (De vorige Windows-versie heette in de app 2.4.0, op GitHub v2.3.4.)
 - Updates: Zono zoekt de nieuwste release mét Windows-programma, zodat een release van de tv-apps de Windows-updates nooit meer verbergt.
