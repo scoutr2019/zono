@@ -325,7 +325,7 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check(!received.report[0].log.includes("geheim") && received.report[0].log.includes("/live/***/***/"), "the log has no login details");
   check((await page.textContent("#toast")).includes("#42"), "the report number is shown");
   await page.evaluate(() => Zono.ping()); await sleep(400);
-  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.7.0", "anonymous daily ping");
+  check(received.ping.length === 1 && /^[0-9a-f]{32}$/.test(received.ping[0].id) && received.ping[0].version === "0.7.1", "anonymous daily ping");
 
   // ---- restart: first profile again, film progress kept
   await page.evaluate(() => localStorage.setItem("zono.profile", JSON.stringify("main")));

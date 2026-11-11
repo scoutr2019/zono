@@ -63,15 +63,23 @@ function salt(): string {
     return trim(file_get_contents($file));
 }
 
-function limited(string $kind, int $per_hour): bool {
+function limit_key(string $kind): string {
     // a salted hash of the sender's address, kept for one day at most
-    $who = hash('sha256', salt() . ($_SERVER['REMOTE_ADDR'] ?? '') . date('Y-m-d'));
-    $key = $kind . ':' . $who;
+    return $kind . ':' . hash('sha256', salt() . ($_SERVER['REMOTE_ADDR'] ?? '') . date('Y-m-d'));
+}
+
+/** True when this sender already did $kind $per_hour times in the last hour. `$count`: also count this time now. */
+function limited(string $kind, int $per_hour, bool $count = true): bool {
+    $key = limit_key($kind);
     $pdo = db();
     $pdo->prepare('DELETE FROM limits WHERE at < ?')->execute([time() - 86400]);
-    $count = $pdo->prepare('SELECT COUNT(*) FROM limits WHERE key = ? AND at > ?');
-    $count->execute([$key, time() - 3600]);
-    if ((int)$count->fetchColumn() >= $per_hour) return true;
-    $pdo->prepare('INSERT INTO limits (key, at) VALUES (?, ?)')->execute([$key, time()]);
+    $seen = $pdo->prepare('SELECT COUNT(*) FROM limits WHERE key = ? AND at > ?');
+    $seen->execute([$key, time() - 3600]);
+    if ((int)$seen->fetchColumn() >= $per_hour) return true;
+    if ($count) counted($kind);
     return false;
+}
+
+function counted(string $kind): void {
+    db()->prepare('INSERT INTO limits (key, at) VALUES (?, ?)')->execute([limit_key($kind), time()]);
 }

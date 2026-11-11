@@ -175,7 +175,8 @@ var STRINGS = {
   "ok_preview": "OK: watch in the small picture",
   "channel_number_jump": "type a number: go to that channel",
   "countries_first": "Countries first",
-  "countries_text": "Channels, films and series of these countries come first, then the rest. OK adds or removes a country; the number is the order."
+  "countries_text": "Channels, films and series of these countries come first, then the rest. OK adds or removes a country; the number is the order.",
+  "report_limit": "You have sent a lot of reports. Try again in an hour."
  },
  "nl": {
   "nav_discover": "Ontdekken",
@@ -352,7 +353,8 @@ var STRINGS = {
   "ok_preview": "OK: kijken in het kleine beeld",
   "channel_number_jump": "nummer intikken: naar die zender",
   "countries_first": "Landen eerst",
-  "countries_text": "Zenders, films en series van deze landen komen eerst, daarna de rest. OK voegt een land toe of haalt het weg; het nummer is de volgorde."
+  "countries_text": "Zenders, films en series van deze landen komen eerst, daarna de rest. OK voegt een land toe of haalt het weg; het nummer is de volgorde.",
+  "report_limit": "Je hebt al veel meldingen verstuurd. Probeer het over een uur opnieuw."
  },
  "fr": {
   "nav_discover": "Découvrir",
@@ -529,7 +531,8 @@ var STRINGS = {
   "ok_preview": "OK : regarder dans la petite image",
   "channel_number_jump": "tapez un numéro : aller à la chaîne",
   "countries_first": "Pays en premier",
-  "countries_text": "Les chaînes, films et séries de ces pays viennent en premier, puis le reste. OK ajoute ou retire un pays ; le numéro indique l’ordre."
+  "countries_text": "Les chaînes, films et séries de ces pays viennent en premier, puis le reste. OK ajoute ou retire un pays ; le numéro indique l’ordre.",
+  "report_limit": "Vous avez envoyé beaucoup de signalements. Réessayez dans une heure."
  },
  "de": {
   "nav_discover": "Entdecken",
@@ -706,7 +709,8 @@ var STRINGS = {
   "ok_preview": "OK: im kleinen Bild ansehen",
   "channel_number_jump": "Nummer eingeben: zum Sender",
   "countries_first": "Länder zuerst",
-  "countries_text": "Sender, Filme und Serien dieser Länder kommen zuerst, dann der Rest. OK fügt ein Land hinzu oder entfernt es; die Zahl ist die Reihenfolge."
+  "countries_text": "Sender, Filme und Serien dieser Länder kommen zuerst, dann der Rest. OK fügt ein Land hinzu oder entfernt es; die Zahl ist die Reihenfolge.",
+  "report_limit": "Du hast schon viele Meldungen gesendet. Versuche es in einer Stunde erneut."
  }
 };
 if (typeof module !== "undefined") module.exports = STRINGS;

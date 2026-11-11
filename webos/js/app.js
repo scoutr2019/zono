@@ -2,7 +2,7 @@
 // Written for the browser inside webOS 4 and newer (no async/await, no optional chaining).
 (function () {
   "use strict";
-  var VERSION = "0.7.0";
+  var VERSION = "0.7.1";
   var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461, BACKSPACE: 8, ESC: 27, CH_UP: 33, CH_DOWN: 34,
     PLAY: 415, PAUSE: 19, PLAY_PAUSE: 10252, STOP: 413, FF: 417, RW: 412 };
   var API = window.ZONO_API || "https://zono.be/api";
@@ -1458,7 +1458,10 @@
     sheet({ title: T("report"), text: T("report_text"), content: [field], items: [{ label: T("send"), go: function () {
       closeSheet(); toast(T("loading"));
       post(API + "/report.php", { version: VERSION, language: lang, windows: platform(), message: message || "(LG TV)", log: LOG.join("\n") })
-        .then(function (a) { toast(T("report_sent", a.number || "?")); }, function () { toast(T("report_failed")); });
+        .then(function (a) { toast(T("report_sent", a.number || "?")); }, function (problem) {
+          log("report: " + (problem && problem.message));
+          toast(problem && problem.status === 429 ? T("report_limit") : T("report_failed") + " (" + ((problem && problem.message) || "?") + ")");
+        });
     } }, { label: T("cancel"), go: closeSheet }] });
   }
 

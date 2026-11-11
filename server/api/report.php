@@ -3,7 +3,8 @@
 // mailed to support. Kept on the server too, so nothing is lost when mail fails.
 require __DIR__ . '/lib.php';
 $data = read_json(300 * 1024);
-if (limited('report', REPORTS_PER_HOUR)) answer(429, ['error' => 'too many reports']);
+// only reports that arrive count ("report2": attempts that failed before this fix are forgotten)
+if (limited('report2', REPORTS_PER_HOUR, false)) answer(429, ['error' => 'too many reports']);
 $version = text($data, 'version', 20, '/^[0-9.]*$/');
 $language = text($data, 'language', 5, '/^[a-z]*$/');
 $windows = text($data, 'windows', 60);
@@ -17,6 +18,7 @@ $pdo->prepare('DELETE FROM reports WHERE at < ?')->execute([gmdate('c', time() -
 $pdo->prepare('INSERT INTO reports (at, version, language, windows, message, contact, log) VALUES (?, ?, ?, ?, ?, ?, ?)')
     ->execute([gmdate('c'), $version, $language, $windows, $message, $contact, $log]);
 $number = (int)$pdo->lastInsertId();
+counted('report2');
 
 $subject = "Zono probleem #$number" . ($version ? " (Zono $version)" : '');
 $body = "Melding #$number\nVersie: $version\nTaal: $language\nWindows: $windows\n"
