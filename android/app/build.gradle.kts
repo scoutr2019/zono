@@ -18,7 +18,7 @@ android {
         minSdk = 23
         targetSdk = 35
         versionCode = 11
-        versionName = "2.3.5"
+        versionName = "2.3.6"
     }
     sourceSets["main"].assets.srcDir(webAssets)
     signingConfigs {
