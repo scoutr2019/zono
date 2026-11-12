@@ -23,7 +23,8 @@ main h3{font:800 19px/1.3 var(--display);margin:0 0 4px}
 .device .icon{width:52px;height:52px;border-radius:16px;background:var(--soft);display:grid;place-items:center;color:var(--violet)}
 .device b{font:800 20px/1.2 "Nunito",system-ui,sans-serif}
 .device span{color:var(--muted);font-size:14px}
-.release{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.release,.tester{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.tester{background:#fffbea;border-color:#f3e2a2}.tester>div{flex:1 1 380px}
 .button{display:inline-flex;align-items:center;gap:10px;border-radius:999px;padding:13px 20px;font-weight:800;text-decoration:none;background:var(--violet);color:#fff;box-shadow:0 10px 24px rgba(81,78,255,.3)}
 .button.ghost{background:#fff;color:var(--violet);border:1px solid var(--line);box-shadow:none}
 .button svg{width:18px;height:18px}
@@ -103,6 +104,11 @@ details p{margin:8px 0 2px}
     <a class="button" id="get" href="https://github.com/scoutr2019/zono/raw/main/tv/Zono-TV.apk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="get-label"></span></a>
   </div>
 
+  <div class="card tester" id="tester">
+    <div><h3 data-t="testTitle"></h3><p class="muted" data-t="testText" style="margin:6px 0 0"></p></div>
+    <a class="button" href="mailto:support@zono.be?subject=Zono%20tester&body=Gmail%3A%20" data-t="testBtn"></a>
+  </div>
+
   <div class="card look">
     <h2 data-t="lookTitle"></h2><p class="muted" data-t="lookSub" style="margin:0"></p>
     <div class="tv"><div class="frame"><img id="shot" alt="" width="1600" height="900"></div><div class="stand"></div></div>
@@ -180,6 +186,7 @@ nl: {
     ["Mijn LG vindt Dev Manager niet.", "Kijk of <b>Key Server</b> aan staat in Developer Mode, of pc en tv op hetzelfde netwerk zitten, en of het IP-adres klopt. Het IP-adres van een tv kan na een herstart veranderen."],
     ["Is dit veilig?", "Zono staat open op GitHub. Je gegevens blijven op je tv; je provider zie je alleen zelf. Download Zono alleen via zono.be of GitHub."]
   ],
+  testTitle: "Word tester in de Play Store", testText: "Help Zono in de Google Play Store te krijgen. Heb je een Android TV of Google TV? Stuur ons je Gmail-adres, dan krijg je een uitnodiging. Je installeert Zono dan via de Play Store en blijft 14 dagen ingeschreven. Meer is het niet.", testBtn: "Ik doe mee",
   playerOnly: "Zono is alleen de player. Er zitten geen streams of zenders in: je gebruikt je eigen abonnement."
 },
 fr: {
@@ -229,6 +236,7 @@ fr: {
     ["Dev Manager ne trouve pas ma LG.", "Vérifiez que <b>Key Server</b> est activé, que le PC et la télé sont sur le même réseau et que l'adresse IP est correcte. Elle peut changer après un redémarrage."],
     ["Est-ce sûr ?", "Zono est open source sur GitHub. Vos données restent sur votre télé. Téléchargez Zono uniquement via zono.be ou GitHub."]
   ],
+  testTitle: "Devenez testeur sur le Play Store", testText: "Aidez Zono à arriver sur le Google Play Store. Vous avez une Android TV ou une Google TV ? Envoyez-nous votre adresse Gmail et vous recevrez une invitation. Vous installez Zono via le Play Store et restez inscrit 14 jours. C\u2019est tout.", testBtn: "Je participe",
   playerOnly: "Zono est uniquement le lecteur. Aucun flux ni chaîne inclus : vous utilisez votre propre abonnement."
 },
 en: {
@@ -278,6 +286,7 @@ en: {
     ["Dev Manager can't find my LG.", "Check that <b>Key Server</b> is on, that the PC and TV are on the same network and that the IP address is right. It can change after a restart."],
     ["Is this safe?", "Zono is open source on GitHub. Your details stay on your TV. Only download Zono from zono.be or GitHub."]
   ],
+  testTitle: "Become a Play Store tester", testText: "Help get Zono into the Google Play Store. Have an Android TV or Google TV? Send us your Gmail address and you\u2019ll get an invite. You install Zono from the Play Store and stay signed up for 14 days. That\u2019s all.", testBtn: "Count me in",
   playerOnly: "Zono is just the player. No streams or channels are included: you use your own subscription."
 },
 de: {
@@ -327,6 +336,7 @@ de: {
     ["Dev Manager findet meinen LG nicht.", "Prüfe, ob <b>Key Server</b> an ist, ob PC und Fernseher im selben Netzwerk sind und ob die IP-Adresse stimmt. Sie kann sich nach einem Neustart ändern."],
     ["Ist das sicher?", "Zono ist Open Source auf GitHub. Deine Daten bleiben auf dem Fernseher. Lade Zono nur von zono.be oder GitHub."]
   ],
+  testTitle: "Werde Tester im Play Store", testText: "Hilf mit, Zono in den Google Play Store zu bringen. Du hast einen Android TV oder Google TV? Schick uns deine Gmail-Adresse, dann bekommst du eine Einladung. Du installierst Zono über den Play Store und bleibst 14 Tage angemeldet. Mehr nicht.", testBtn: "Ich mache mit",
   playerOnly: "Zono ist nur der Player. Es sind keine Streams oder Sender enthalten: Du nutzt dein eigenes Abo."
 }};
 var SHOTS = ["discover", "film", "live", "fullscreen", "guide"], shot = 0;
