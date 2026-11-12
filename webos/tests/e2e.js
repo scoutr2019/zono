@@ -264,6 +264,19 @@ function check(ok, what) { console.log((ok ? "ok   " : "FAIL ") + what); if (!ok
   check(await page.evaluate(() => !document.getElementById("player").hidden && !document.getElementById("player").classList.contains("mini")), "OK on it plays that channel");
   await key("Escape"); await sleep(1200);
 
+  // ---- Back on the first screen asks before closing Zono
+  await focusKey("menu-discover"); await key("Escape"); await sleep(150);
+  check((await page.isVisible("#sheet")) && (await page.textContent("#sheet")).includes("Zono sluiten?"), "Back on Discover asks 'Zono sluiten?'");
+  await shot("01c-exit");
+  await key("Escape"); await sleep(150);
+  check(!(await page.isVisible("#sheet")), "Back again keeps Zono open");
+  await page.evaluate(() => { window.PalmSystem = { platformBack: () => { window.__quit = true; } }; });
+  await key("Escape"); await sleep(150);
+  await page.evaluate(() => [...document.querySelectorAll("#sheet .row-item")].find((r) => /Zono sluiten/.test(r.textContent)).focus());
+  await key("Enter"); await sleep(150);
+  check(await page.evaluate(() => window.__quit === true), "'Zono sluiten' closes the app");
+  await page.evaluate(() => { delete window.PalmSystem; delete window.__quit; });
+
   // ---- films: subtitles from OpenSubtitles
   await focusKey("menu-movies"); await key("Enter"); await sleep(200);
   await key("ArrowRight"); await key("ArrowDown", 2);

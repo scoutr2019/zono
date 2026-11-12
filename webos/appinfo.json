@@ -7,6 +7,7 @@
   "title": "Zono",
   "icon": "img/icon.png",
   "largeIcon": "img/largeIcon.png",
+  "splashBackground": "img/splash.png",
   "bgColor": "#0b0b0f",
   "iconColor": "#5558f5",
   "resolution": "1920x1080",

@@ -1,0 +1,18 @@
+#EXTM3U
+# Zono demo playlist: free test streams and Creative Commons films, so anyone can try Zono without a subscription.
+# Films (c) Blender Foundation, CC BY 3.0 (peach.blender.org, orange.blender.org, durian.blender.org, mango.blender.org).
+# Test streams are public test streams from Akamai, Mux and Apple.
+#EXTINF:-1 tvg-id="demo.live" group-title="Demo live",Demo Live (Akamai)
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+#EXTINF:-1 tvg-id="demo.bunny" group-title="Demo live",Demo Channel 1
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+#EXTINF:-1 tvg-id="demo.bipbop" group-title="Demo live",Demo Channel 2
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8
+#EXTINF:-1 tvg-logo="https://zono.be/demo/big-buck-bunny.jpg" group-title="Demo films",Big Buck Bunny
+https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+#EXTINF:-1 tvg-logo="https://zono.be/demo/elephants-dream.jpg" group-title="Demo films",Elephants Dream
+https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4
+#EXTINF:-1 tvg-logo="https://zono.be/demo/sintel.jpg" group-title="Demo films",Sintel
+https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4
+#EXTINF:-1 tvg-logo="https://zono.be/demo/tears-of-steel.jpg" group-title="Demo films",Tears of Steel
+https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4

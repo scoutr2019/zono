@@ -1,0 +1,4 @@
+<IfModule mod_headers.c>
+  Header set Access-Control-Allow-Origin "*"
+</IfModule>
+AddType audio/x-mpegurl .m3u

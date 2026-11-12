@@ -1729,7 +1729,7 @@
     if (best) focus(best);
   }
 
-  var okTarget = null, okTimer = null, lastBack = 0, lastInput = null, lastMove = 0;
+  var okTarget = null, okTimer = null, lastInput = null, lastMove = 0;
   function back() {
     var a = document.activeElement;
     if (a && a.tagName === "INPUT") { lastInput = a; a.blur(); return; } // closes the TV keyboard; arrows go on from the field
@@ -1737,10 +1737,15 @@
     if (S.detail) { S.detail = null; render(); return; }
     if (S.series) { S.series = null; render(); return; }
     if (S.source && !S.choosing && S.page !== "discover") { S.page = "discover"; render(); focusFirst(".menu .sel"); return; }
-    if (Date.now() - lastBack < 2500) {
-      if (window.ZonoAndroid) ZonoAndroid.exit();
-      else if (window.PalmSystem && PalmSystem.platformBack) PalmSystem.platformBack(); else window.close();
-    } else { lastBack = Date.now(); toast(T("exit_hint")); }
+    // the first screen: ask before closing (what LG and Google ask of TV apps)
+    sheet({ title: T("exit_q"), items: [
+      { label: T("cancel"), go: closeSheet },
+      { label: T("exit_yes"), go: function () { closeSheet(); quit(); } }] });
+  }
+
+  function quit() {
+    if (window.ZonoAndroid) ZonoAndroid.exit();
+    else if (window.PalmSystem && PalmSystem.platformBack) PalmSystem.platformBack(); else window.close();
   }
 
   function uiKey(k, e, scope) {
