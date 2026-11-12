@@ -15,9 +15,9 @@ android {
     compileSdk = 36
     defaultConfig {
         applicationId = "be.zono.tv"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 36
-        versionCode = 14
+        versionCode = 15
         versionName = "2.3.8"
     }
     sourceSets["main"].assets.srcDir(webAssets)
