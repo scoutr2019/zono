@@ -7,7 +7,6 @@ Use a Python whose Tk draws with fontconfig (ZONO_SHOT_PYTHON=/usr/bin/python3.1
 Inter, so the letters look like on Windows.
 """
 import json
-import math
 import os
 import random
 import subprocess
