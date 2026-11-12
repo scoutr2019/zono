@@ -12,12 +12,12 @@ val syncWeb by tasks.registering(Sync::class) {
 
 android {
     namespace = "be.zono.tv"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "be.zono.tv"
         minSdk = 23
-        targetSdk = 35
-        versionCode = 13
+        targetSdk = 36
+        versionCode = 14
         versionName = "2.3.8"
     }
     sourceSets["main"].assets.srcDir(webAssets)
